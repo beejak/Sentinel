@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/beejak/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/beejak/Sentinel/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/beejak/Sentinel/actions/workflows/codeql.yml/badge.svg)](https://github.com/beejak/Sentinel/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/beejak/Sentinel/branch/main/graph/badge.svg)](https://codecov.io/gh/beejak/Sentinel)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 A lightweight command-line tool to scan and report on MCP endpoints, schemas, and capabilities.
@@ -20,6 +21,13 @@ A lightweight command-line tool to scan and report on MCP endpoints, schemas, an
 - Run CLI: `scripts\run_scanner.cmd --help`
 - Start local harness (secure): `scripts\run_harness.cmd`
 - Start vulnerable MCP server: `scripts\run_vuln_mcp.cmd`
+
+### Install
+- Pip (dev install): `pip install -r requirements.txt`
+- CLI entry point (after pip/packaging): `mcp-scanner --help`
+- Docker:
+  - Build: `docker build -t mcp-scanner:latest .`
+  - Run: `docker run --rm mcp-scanner:latest --help`
 
 ### Make targets (macOS/Linux or with make on Windows)
 - `make install` – create venv and install deps

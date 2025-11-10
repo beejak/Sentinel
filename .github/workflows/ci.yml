@@ -20,14 +20,23 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pre-commit
+      - name: Pre-commit run
+        run: pre-commit run --all-files --show-diff-on-failure
       - name: Ruff lint
         run: ruff check --output-format=github .
       - name: Black format check
         run: black --check .
       - name: Mypy typecheck
         run: mypy .
-      - name: Tests
+      - name: Tests (with coverage)
         run: pytest -q
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: python
+          fail_ci_if_error: false
       - name: CLI help
         run: python main.py --help
   go:

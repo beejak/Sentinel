@@ -1,5 +1,6 @@
 import datetime as _dt
 import json
+import logging
 import socket
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
@@ -8,6 +9,8 @@ import requests
 
 USER_AGENT = "mcp-scanner/0.1 (+https://example.invalid)"
 TIMEOUT = 10
+
+_logger = logging.getLogger(__name__)
 
 
 def _origin(url: str) -> str:
@@ -19,6 +22,7 @@ def _origin(url: str) -> str:
 
 def _get(url: str) -> Tuple[int, Dict[str, str], Optional[Any], Optional[str]]:
     try:
+        _logger.debug("GET %s", url)
         resp = requests.get(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json, */*"}, timeout=TIMEOUT, allow_redirects=True)
         status = resp.status_code
         headers = {k: v for k, v in resp.headers.items()}
@@ -30,6 +34,7 @@ def _get(url: str) -> Tuple[int, Dict[str, str], Optional[Any], Optional[str]]:
                 data = None
         return status, headers, data, None
     except requests.RequestException as e:
+        _logger.error("HTTP error for %s: %s", url, e)
         return 0, {}, None, str(e)
 
 
@@ -60,6 +65,7 @@ def discover(target: str) -> Dict[str, Any]:
     now = _dt.datetime.utcnow().isoformat() + "Z"
     origin = _origin(target)
 
+    _logger.info("Discovery start: %s -> %s", target, origin)
     probe_status, probe_headers, probe_json, probe_error = _get(target)
     www_auth = _parse_www_authenticate(probe_headers) if probe_headers else {"raw": [], "parsed": []}
 

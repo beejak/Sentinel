@@ -5,3 +5,4 @@ requests-mock>=1.11
 mypy>=1.11
 ruff>=0.6
 black>=24.8
+pre-commit>=3.8
