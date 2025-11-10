@@ -1,5 +1,9 @@
 # MCP Scanner
 
+[![CI](https://github.com/beejak/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/beejak/Sentinel/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/beejak/Sentinel/actions/workflows/codeql.yml/badge.svg)](https://github.com/beejak/Sentinel/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A lightweight command-line tool to scan and report on MCP endpoints, schemas, and capabilities.
 
 ## Goals

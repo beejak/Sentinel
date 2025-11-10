@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   python:
-    name: Python - lint & smoke
+    name: Python - lint, typecheck, test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +19,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: Syntax check
-        run: python -m compileall .
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+      - name: Ruff lint
+        run: ruff check --output-format=github .
+      - name: Black format check
+        run: black --check .
+      - name: Mypy typecheck
+        run: mypy .
+      - name: Tests
+        run: pytest -q
       - name: CLI help
         run: python main.py --help
   go:
