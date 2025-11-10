@@ -75,6 +75,8 @@ def main() -> None:
 
     # probe subcommand
     p_probe = subparsers.add_parser("probe", parents=[common], help="Run runtime probes against target")
+    p_probe.add_argument("--baseline-in", help="Path to baseline fingerprints to suppress pre-existing findings")
+    p_probe.add_argument("--baseline-out", help="Write current fingerprints to file (establish new baseline)")
 
     # repo-scan subcommand (static analysis placeholder)
     p_repo = subparsers.add_parser("repo-scan", parents=[common], help="Scan a repository path or URL (static analysis)")
@@ -85,6 +87,8 @@ def main() -> None:
     p_repo.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
     p_repo.add_argument("--html", help="Write HTML report to file")
     p_repo.add_argument("--packs", action="append", help="Semgrep rule packs to include (repeatable). Defaults to recommended packs.")
+    p_repo.add_argument("--baseline-in", help="Path to baseline fingerprints")
+    p_repo.add_argument("--baseline-out", help="Write current fingerprints to file")
     p_probe.add_argument("target", help="Target base URL")
     p_probe.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
@@ -103,6 +107,8 @@ def main() -> None:
     p_scan.add_argument("--html", help="Write HTML report to file")
     p_scan.add_argument("--json", action="store_true", help="Print JSON to stdout (default view)")
     p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
+    p_scan.add_argument("--baseline-in", help="Path to baseline fingerprints")
+    p_scan.add_argument("--baseline-out", help="Write current fingerprints to file")
 
     # Backward-compatible mode: if no subcommand provided, treat as scan stub
     parser.add_argument("fallback_target", nargs="?", help=argparse.SUPPRESS)
@@ -146,6 +152,37 @@ def main() -> None:
     cfg["http"] = http_cfg
     cfg["policy"] = policy
     set_config(cfg)
+
+    # Baseline helpers
+    def _fp(f: Dict[str, Any]) -> str:
+        import hashlib
+        path = str(((f.get("evidence") or {}).get("path")) or "")
+        return hashlib.sha256(f"{f.get('ruleId')}|{path}".encode()).hexdigest()
+
+    def _load_baseline_file(p: Optional[str]) -> set[str]:
+        if not p:
+            return set()
+        try:
+            with open(p, 'r', encoding='utf-8') as fh:
+                data = json.load(fh)
+            if isinstance(data, list):
+                return set(map(str, data))
+            if isinstance(data, dict) and isinstance(data.get('fingerprints'), list):
+                return set(map(str, data['fingerprints']))
+        except Exception:
+            return set()
+        return set()
+
+    def _write_baseline_file(p: Optional[str], findings: list[dict]) -> None:
+        if not p:
+            return
+        fps = sorted({_fp(f) for f in findings})
+        payload = {"fingerprints": fps}
+        try:
+            with open(p, 'w', encoding='utf-8') as fh:
+                fh.write(json.dumps(payload, indent=2))
+        except Exception:
+            pass
 
     # Configure logging
     log_level = getattr(args, "log_level", None) or "INFO"
@@ -194,6 +231,12 @@ def main() -> None:
     if args.command == "repo-scan":
         from scanner.repo_scan import repo_scan as _repo_scan, repo_scan_to_sarif, repo_scan_to_html
         result = _repo_scan(path=getattr(args, "path", None), repo=getattr(args, "repo", None), semgrep_docker=getattr(args, "semgrep_docker", False), packs=getattr(args, "packs", None))
+        # Baseline filtering
+        baseline = _load_baseline_file(getattr(args, "baseline_in", None))
+        if baseline:
+            result["findings"] = [f for f in result.get("findings", []) if _fp(f) not in baseline]
+        if getattr(args, "baseline_out", None):
+            _write_baseline_file(getattr(args, "baseline_out", None), result.get("findings", []))
         out_path = getattr(args, "out", None)
         if out_path:
             with open(out_path, "w", encoding="utf-8") as f:
@@ -237,6 +280,12 @@ def main() -> None:
             out_sarif=args.sarif,
             enable_private_egress_checks=getattr(args, "enable_private_egress_checks", False),
         )
+        # Baseline filtering
+        baseline = _load_baseline_file(getattr(args, "baseline_in", None))
+        if baseline:
+            result["findings"] = [f for f in result.get("findings", []) if _fp(f) not in baseline]
+        if getattr(args, "baseline_out", None):
+            _write_baseline_file(getattr(args, "baseline_out", None), result.get("findings", []))
         # Print summary if no out
         if not getattr(args, "out", None):
             print(json.dumps(result, indent=2))
@@ -267,6 +316,13 @@ def main() -> None:
             enable_private_egress_checks=getattr(args, "enable_private_egress_checks", False),
         )
     sc = _scorecard((disc or {}).get("oauth_summary", {})) if isinstance(disc, dict) else {"score": 0, "checks": []}
+    # Apply baseline filtering to probes if requested
+    baseline = _load_baseline_file(getattr(args, "baseline_in", None))
+    if baseline and isinstance(probes, dict):
+        probes["findings"] = [f for f in probes.get("findings", []) if _fp(f) not in baseline]
+    if getattr(args, "baseline_out", None) and isinstance(probes, dict):
+        _write_baseline_file(getattr(args, "baseline_out", None), probes.get("findings", []))
+
     result = {
         "target": target,
         "discovery": disc,
@@ -374,8 +430,19 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     lo = sum(1 for f in findings if (f.get('severity') == 'low'))
     def _sev_cls(s: str) -> str:
         return {'high':'sev-high','medium':'sev-medium','low':'sev-low'}.get(s,'')
+    # Pull CWE if available from rule meta
+    try:
+        from scanner.probes import RULE_META as _RULE_META
+    except Exception:
+        _RULE_META = {}
+    def _cwe_link(f):
+        cwe = (_RULE_META.get(f.get('ruleId','')) or {}).get('cwe')
+        if cwe and cwe.startswith('CWE-'):
+            num = cwe.split('-')[-1]
+            return f"<a href='https://cwe.mitre.org/data/definitions/{num}.html' target='_blank'>{cwe}</a>"
+        return ""
     rows = "\n".join(
-        f"<tr><td><a href='docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td></tr>"
+        f"<tr><td><a href='docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe_link(f)}</td></tr>"
         for f in findings
     )
     return f"""
@@ -405,9 +472,9 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 {''.join(f"<li>{html.escape(str(c.get('check')))} — {'OK' if c.get('ok') else 'MISS'} ({c.get('note')})</li>" for c in (sc.get('checks') or []))}
 </ul>
 <h2>Findings</h2>
-<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th></tr></thead>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>CWE</th></tr></thead>
 <tbody>
-{rows if rows else '<tr><td colspan=\"3\">No findings</td></tr>'}
+{rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
 </tbody></table>
 <p style='margin-top:1rem;color:#666'>Legend: <span class='sev-high'>High</span>, <span class='sev-medium'>Medium</span>, <span class='sev-low'>Low</span>. See <a href='docs/PROBES.md' target='_blank'>Probe Catalog</a> for details.</p>
 </body></html>

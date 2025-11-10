@@ -44,6 +44,10 @@ Output formats
 - SARIF: Static Analysis Results Interchange Format 2.1.0 (probes and scan)
 - Markdown: human-readable summary (scan)
 
+Baselines
+- --baseline-in <file>: fingerprints to ignore (suppression of pre-existing findings)
+- --baseline-out <file>: write current findings' fingerprints (to establish a baseline)
+
 Examples
 - Discovery: `python main.py discover http://127.0.0.1:8085 -o docs/samples/discovery.json`
 - Probes: `python main.py probe http://127.0.0.1:8090 --profile baseline --out docs/samples/probe.json --sarif docs/samples/probe.sarif`

@@ -93,16 +93,22 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool,
                 sev = {"INFO":"low","WARNING":"medium","ERROR":"high"}.get(str(sev).upper(), "medium")
             title = r.get("extra", {}).get("message") or rule_id
             loc = r.get("extra", {}).get("lines", "")
+            cwe = r.get("extra", {}).get("metadata", {}).get("cwe")
+            if isinstance(cwe, list) and cwe:
+                cwe = cwe[0]
+            evidence = {
+                "path": (r.get("path") or r.get("extra", {}).get("path")),
+                "start": r.get("start"),
+                "end": r.get("end"),
+                "lines": loc,
+            }
+            if cwe:
+                evidence["cwe"] = cwe
             findings.append({
                 "ruleId": f"SEMGREP::{rule_id}",
                 "severity": sev,
                 "title": title,
-                "evidence": {
-                    "path": (r.get("path") or r.get("extra", {}).get("path")),
-                    "start": r.get("start"),
-                    "end": r.get("end"),
-                    "lines": loc,
-                },
+                "evidence": evidence,
             })
         return {"engine": "semgrep", "path": work, "findings": findings, "docker": use_docker}
     finally:
@@ -112,32 +118,43 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool,
 
 
 def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
+    import hashlib
     findings = result.get("findings", [])
     rules: Dict[str, Dict[str, Any]] = {}
+    cwes: List[str] = []
     for f in findings:
         rid = f.get("ruleId")
         if rid and rid not in rules:
+            level = {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning")
             rules[rid] = {
                 "id": rid,
                 "name": rid,
                 "shortDescription": {"text": f.get("title", rid)},
-                "defaultConfiguration": {"level": {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning")},
+                "defaultConfiguration": {"level": level},
             }
+        cwe = (f.get("evidence") or {}).get("cwe")
+        if cwe and cwe not in cwes:
+            cwes.append(str(cwe))
     results = []
     for f in findings:
+        path = str(((f.get("evidence") or {}).get("path")) or "")
+        fp = hashlib.sha256(f"{f.get('ruleId')}|{path}".encode()).hexdigest()
         results.append({
             "ruleId": f.get("ruleId"),
             "level": {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning"),
             "message": {"text": f.get("title")},
-            "locations": [
-                {"physicalLocation": {"artifactLocation": {"uri": str((f.get("evidence") or {}).get("path") or '')}}}
-            ],
+            "locations": ([{"physicalLocation": {"artifactLocation": {"uri": path}}}] if path else None),
+            "partialFingerprints": {"ruleAndPath": fp},
             "properties": {"evidence": f.get("evidence")},
         })
     return {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-        "runs": [{"tool": {"driver": {"name": "mcp-scanner/semgrep", "rules": list(rules.values())}}, "results": results}],
+        "runs": [{
+            "tool": {"driver": {"name": "mcp-scanner/semgrep", "rules": list(rules.values())}},
+            "taxonomies": [{"name": "CWE", "taxa": [{"id": c} for c in cwes]}] if cwes else [],
+            "results": results
+        }],
     }
 
 
