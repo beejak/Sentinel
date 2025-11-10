@@ -40,6 +40,8 @@ def main() -> None:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--log-level", default="INFO", help="Logging level (DEBUG, INFO, WARNING, ERROR)")
     common.add_argument("--log-format", choices=["text", "json"], default="text", help="Log output format")
+    common.add_argument("--offline", action="store_true", help="Disable all network activity (skip live endpoint checks)")
+    common.add_argument("--enable-private-egress-checks", action="store_true", help="Opt-in to private-network SSRF/egress tests")
 
     # discover subcommand
     p_discover = subparsers.add_parser("discover", parents=[common], help="Discover OAuth metadata and capabilities for an MCP server")
@@ -67,6 +69,14 @@ def main() -> None:
 
     # probe subcommand
     p_probe = subparsers.add_parser("probe", parents=[common], help="Run runtime probes against target")
+
+    # repo-scan subcommand (static analysis placeholder)
+    p_repo = subparsers.add_parser("repo-scan", parents=[common], help="Scan a repository path or URL (static analysis)")
+    p_repo.add_argument("--path", help="Local path to scan (repository root)")
+    p_repo.add_argument("--repo", help="Git URL to scan (shallow clone)")
+    p_repo.add_argument("--semgrep-docker", action="store_true", help="Run Semgrep via Docker image (requires Docker)")
+    p_repo.add_argument("--out", help="Write findings JSON to file")
+    p_repo.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
     p_probe.add_argument("target", help="Target base URL")
     p_probe.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
@@ -82,6 +92,7 @@ def main() -> None:
     p_scan.add_argument("--out", help="Write combined JSON to file")
     p_scan.add_argument("--sarif", help="Write SARIF 2.1.0 to file (probes only)")
     p_scan.add_argument("--md", help="Write Markdown report to file")
+    p_scan.add_argument("--html", help="Write HTML report to file")
     p_scan.add_argument("--json", action="store_true", help="Print JSON to stdout (default view)")
     p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
 
@@ -106,6 +117,9 @@ def main() -> None:
     logger.debug("parsed args: %s", vars(args))
 
     if args.command == "discover":
+        if getattr(args, "offline", False):
+            print(json.dumps({"error": "offline_mode", "message": "Discovery skipped due to --offline"}, indent=2))
+            return
         result = discover(args.target)
         out = json.dumps(result, indent=2)
         if args.output:
@@ -132,6 +146,22 @@ def main() -> None:
             print(out)
         return
 
+    if args.command == "repo-scan":
+        # Placeholder implementation; prefer Semgrep if available
+        result = {
+            "command": "repo-scan",
+            "path": getattr(args, "path", None),
+            "repo": getattr(args, "repo", None),
+            "notes": "Static analysis not yet implemented. Install Semgrep or use --semgrep-docker; planned support includes secrets, supply-chain, and unsafe patterns.",
+        }
+        out_path = getattr(args, "out", None)
+        if out_path:
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(result, indent=2))
+        else:
+            print(json.dumps(result, indent=2))
+        return
+
     if args.command == "auth-dynamic":
         result = run_auth_flow_dynamic(
             target=args.target,
@@ -150,12 +180,16 @@ def main() -> None:
         return
 
     if args.command == "probe":
+        if getattr(args, "offline", False):
+            print(json.dumps({"error": "offline_mode", "message": "Probes skipped due to --offline"}, indent=2))
+            return
         result = run_probes(
             target=args.target,
             profile=args.profile,
             request_timeout=args.timeout,
             out_json=args.out,
             out_sarif=args.sarif,
+            enable_private_egress_checks=getattr(args, "enable_private_egress_checks", False),
         )
         # Print summary if no out
         if not getattr(args, "out", None):
@@ -173,14 +207,19 @@ def main() -> None:
         return
 
     # Full scan: discovery + probes
-    disc = discover(target)
-    probes = run_probes(
-        target=target,
-        profile=getattr(args, "profile", "baseline"),
-        request_timeout=getattr(args, "timeout", 10),
-        out_json=None,
-        out_sarif=getattr(args, "sarif", None),
-    )
+    if getattr(args, "offline", False):
+        disc = {"error": "offline_mode", "message": "Discovery skipped due to --offline"}
+        probes = {"error": "offline_mode", "findings": []}
+    else:
+        disc = discover(target)
+        probes = run_probes(
+            target=target,
+            profile=getattr(args, "profile", "baseline"),
+            request_timeout=getattr(args, "timeout", 10),
+            out_json=None,
+            out_sarif=getattr(args, "sarif", None),
+            enable_private_egress_checks=getattr(args, "enable_private_egress_checks", False),
+        )
     result = {
         "target": target,
         "discovery": disc,
@@ -192,6 +231,9 @@ def main() -> None:
     if getattr(args, "md", None):
         with open(args.md, "w", encoding="utf-8") as f:
             f.write(_render_markdown_scan(result))
+    if getattr(args, "html", None):
+        with open(args.html, "w", encoding="utf-8") as f:
+            f.write(_render_html_scan(result))
     # Print JSON unless suppressed
     if getattr(args, "json", True):
         print(json.dumps(result, indent=2))
@@ -227,6 +269,40 @@ def _render_markdown_scan(result: Dict[str, Any]) -> str:
         for f in findings:
             lines.append(f"- [{f.get('severity','')}] {f.get('ruleId','')}: {f.get('title','')} ")
     return "\n".join(lines)
+
+
+def _render_html_scan(result: Dict[str, Any]) -> str:
+    import html
+    target = html.escape(str(result.get("target", "")))
+    oa = (result.get("discovery", {}).get("oauth_summary") or {})
+    findings = result.get("probes", {}).get("findings", [])
+    rows = "\n".join(
+        f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td></tr>"
+        for f in findings
+    )
+    return f"""
+<!doctype html>
+<html><head><meta charset='utf-8'>
+<title>Sentinel Scan Report</title>
+<style>body{{font-family:system-ui,Arial,sans-serif;margin:2rem}} table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #ddd;padding:.5rem}} th{{background:#f8f8f8}}</style>
+</head>
+<body>
+<h1>Sentinel Scan Report</h1>
+<p><strong>Target:</strong> {target}</p>
+<h2>OAuth Summary</h2>
+<ul>
+<li>issuer: {html.escape(str(oa.get('issuer','')))}</li>
+<li>authorization_endpoint: {html.escape(str(oa.get('authorization_endpoint','')))}</li>
+<li>token_endpoint: {html.escape(str(oa.get('token_endpoint','')))}</li>
+<li>jwks_uri: {html.escape(str(oa.get('jwks_uri','')))}</li>
+</ul>
+<h2>Findings</h2>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th></tr></thead>
+<tbody>
+{rows if rows else '<tr><td colspan="3">No findings</td></tr>'}
+</tbody></table>
+</body></html>
+"""
 
 
 if __name__ == "__main__":

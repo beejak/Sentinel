@@ -50,7 +50,7 @@ class Probe:
     id: str = "PROBE"
     intrusive: bool = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
 
@@ -58,7 +58,7 @@ class BogusTokenProbe(Probe):
     id = "PROBE-001"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
             r = requests.get(origin, headers={"Authorization": "Bearer X_BOGUS_"}, timeout=timeout, allow_redirects=False)
@@ -73,7 +73,7 @@ class MalformedRequestProbe(Probe):
     id = "PROBE-002"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         findings: List[Dict[str, Any]] = []
         # Send invalid Content-Type and JSON body to GET
@@ -93,7 +93,7 @@ class OversizePayloadProbe(Probe):
     def __init__(self, size_kb: int = 512):
         self.size_kb = size_kb
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         findings: List[Dict[str, Any]] = []
         data = b"x" * (self.size_kb * 1024)
@@ -110,7 +110,7 @@ class CORSPreflightProbe(Probe):
     id = "PROBE-004"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
             r = requests.options(
@@ -220,7 +220,7 @@ class ToolGuardrailsProbe(Probe):
     id = "PROBE-005"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         redirect_uri = "http://127.0.0.1:8765/callback"
         client_id = _oauth_dynamic_register(origin, redirect_uri, timeout)
@@ -284,7 +284,7 @@ class StateReplayProbe(Probe):
     id = "PROBE-006"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         redirect_uri = "http://127.0.0.1:8765/callback"
         client_id = _oauth_dynamic_register(origin, redirect_uri, timeout)
@@ -313,7 +313,7 @@ class RateLimitProbe(Probe):
     id = "PROBE-007"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         redirect_uri = "http://127.0.0.1:8765/callback"
         client_id = _oauth_dynamic_register(origin, redirect_uri, timeout)
@@ -361,7 +361,7 @@ class MethodMatrixProbe(Probe):
     id = "PROBE-008"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         findings: List[Dict[str, Any]] = []
         # Endpoints to test: /tool/run should reject GET; /tools should accept GET; root may accept GET
@@ -394,7 +394,7 @@ class ContentTypeMatrixProbe(Probe):
     id = "PROBE-009"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         findings: List[Dict[str, Any]] = []
         # POST with wrong Content-Type but valid JSON body, and invalid JSON body
@@ -432,7 +432,7 @@ class TraceMethodProbe(Probe):
     id = "PROBE-011"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
             r = requests.request("TRACE", origin + "/tool/run", timeout=timeout)
@@ -449,7 +449,7 @@ class MissingContentTypeProbe(Probe):
     id = "PROBE-012"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
@@ -474,7 +474,7 @@ class LargeHeaderProbe(Probe):
     id = "PROBE-013"
     intrusive = True
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         headers = {"Content-Type": "application/json", "X-Long": "a" * 8192}
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
@@ -491,8 +491,10 @@ class SSRFProbe(Probe):
     id = "PROBE-014"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
+        if not (options or {}).get("enable_private_egress_checks", False):
+            return [_result(self.id, "low", "Private egress checks disabled (opt-in)", {})]
         redirect_uri = "http://127.0.0.1:8765/callback"
         client_id = _oauth_dynamic_register(origin, redirect_uri, timeout)
         if not client_id:
@@ -544,7 +546,7 @@ class SecurityHeadersProbe(Probe):
     id = "PROBE-015"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
             r = requests.get(origin, timeout=timeout)
@@ -570,7 +572,7 @@ class InvalidAuthProbe(Probe):
     id = "PROBE-010"
     intrusive = False
 
-    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
@@ -591,7 +593,7 @@ class InvalidAuthProbe(Probe):
             return [_result(self.id, "low", "Error calling /tool/run without auth", {"error": str(e)})]
 
 
-def run_probes(*, target: str, profile: str = "baseline", request_timeout: int = 10, out_json: Optional[str] = None, out_sarif: Optional[str] = None) -> Dict[str, Any]:
+def run_probes(*, target: str, profile: str = "baseline", request_timeout: int = 10, out_json: Optional[str] = None, out_sarif: Optional[str] = None, enable_private_egress_checks: bool = False) -> Dict[str, Any]:
     start = time.time()
     probes: List[Probe] = [
         BogusTokenProbe(),
@@ -616,7 +618,7 @@ def run_probes(*, target: str, profile: str = "baseline", request_timeout: int =
     for p in probes:
         if p.intrusive and profile != "intrusive":
             continue
-        findings.extend(p.run(target, timeout=request_timeout))
+        findings.extend(p.run(target, timeout=request_timeout, options={"enable_private_egress_checks": enable_private_egress_checks}))
 
     out: Dict[str, Any] = {
         "target": target,

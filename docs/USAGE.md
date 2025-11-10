@@ -8,12 +8,14 @@ Commands
 - Dynamic registration + PKCE (no client pre-setup)
   - python main.py auth-dynamic <issuer-base-url> [--scopes "openid profile"] [--resource <uri>] [--redirect-port 8765] [--open-browser] [-o out.json]
 - Runtime probes (Milestone 3)
-  - python main.py probe <base-url> [--profile baseline|intrusive] [--timeout 10] [--out findings.json] [--sarif findings.sarif] [--no-fail]
+  - python main.py probe <base-url> [--profile baseline|intrusive] [--timeout 10] [--out findings.json] [--sarif findings.sarif] [--no-fail] [--offline] [--enable-private-egress-checks]
     - Baseline probes: PROBE-001 (Bogus token), PROBE-002 (Malformed GET), PROBE-004 (CORS preflight), PROBE-005 (Tool guardrails + structured error), PROBE-006 (Auth code replay), PROBE-007 (Rate limiting), PROBE-008 (Method matrix), PROBE-009 (Content-Type matrix), PROBE-010 (Invalid auth), PROBE-011 (TRACE method), PROBE-012 (Missing Content-Type), PROBE-014 (SSRF/egress)
 - Intrusive adds: PROBE-003 (Oversize payload), PROBE-013 (Large header)
 - Other checks: PROBE-015 (Security headers)
 - Full scan (discover + probes)
-  - python main.py scan <base-url> [--profile baseline|intrusive] [--timeout 10] [--out scan.json] [--sarif findings.sarif] [--md report.md] [--no-fail]
+  - python main.py scan <base-url> [--profile baseline|intrusive] [--timeout 10] [--out scan.json] [--sarif findings.sarif] [--md report.md] [--html report.html] [--no-fail] [--offline] [--enable-private-egress-checks]
+- Repository scan (static analysis; stub)
+  - python main.py repo-scan [--path <dir>] [--repo <git-url>] [--semgrep-docker] [--out out.json] [--sarif out.sarif]
 
 Defaults
 - Redirect callback port: 8765 (auth --redirect-port)
@@ -34,6 +36,8 @@ Tips
 Logging
 - --log-level: DEBUG|INFO|WARNING|ERROR (default INFO)
 - --log-format: text (default) or json (JSON lines)
+- --offline: skips live endpoint network calls (discovery/probes)
+- --enable-private-egress-checks: opt-in to private-network SSRF targets and CIDR tests
 
 Output formats
 - JSON: machine-readable results
