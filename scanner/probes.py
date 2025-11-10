@@ -43,6 +43,7 @@ def _result(rule: str, severity: Severity, title: str, evidence: Dict[str, Any])
 
 def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     rules: Dict[str, Dict[str, Any]] = {}
+    cwes: List[str] = []
     for f in findings:
         rid = f.get("ruleId")
         if rid and rid not in rules:
@@ -57,13 +58,20 @@ def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "properties": {"cwe": meta.get("cwe")},
                 "defaultConfiguration": {"level": level},
             }
+            if meta.get("cwe") and meta.get("cwe") not in cwes:
+                cwes.append(meta.get("cwe"))
     results = []
+    import hashlib
     for f in findings:
         level = {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning")
+        path = str(((f.get("evidence") or {}).get("path")) or "")
+        fp = hashlib.sha256(f"{f.get('ruleId')}|{path}".encode()).hexdigest()
         results.append({
             "ruleId": f.get("ruleId"),
             "level": level,
             "message": {"text": f.get("title")},
+            "locations": ([{"physicalLocation": {"artifactLocation": {"uri": path}}}] if path else None),
+            "partialFingerprints": {"ruleAndPath": fp},
             "properties": {"evidence": f.get("evidence")},
         })
     return {
@@ -72,6 +80,9 @@ def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         "runs": [
             {
                 "tool": {"driver": {"name": "mcp-scanner", "rules": list(rules.values())}},
+                "taxonomies": [
+                    {"name": "CWE", "taxa": [{"id": c} for c in cwes]}
+                ] if cwes else [],
                 "results": results,
             }
         ],

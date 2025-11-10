@@ -15,7 +15,7 @@ Commands
 - Full scan (discover + probes)
   - python main.py scan <base-url> [--profile baseline|intrusive] [--timeout 10] [--out scan.json] [--sarif findings.sarif] [--md report.md] [--html report.html] [--no-fail] [--offline] [--enable-private-egress-checks]
 - Repository scan (static analysis)
-  - python main.py repo-scan [--path <dir>] [--repo <git-url>] [--semgrep-docker] [--out out.json] [--sarif out.sarif] [--html out.html]
+  - python main.py repo-scan [--path <dir>] [--repo <git-url>] [--semgrep-docker] [--packs p/secrets --packs p/owasp-top-ten] [--out out.json] [--sarif out.sarif] [--html out.html]
 
 Defaults
 - Redirect callback port: 8765 (auth --redirect-port)

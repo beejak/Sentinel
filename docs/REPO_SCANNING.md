@@ -14,6 +14,9 @@ We invoke Semgrep with recommended packs and fall back to `auto` if unavailable:
 - p/r2c-security-audit — general security checks
 - p/owasp-top-ten — web-centric checks
 
+Customize packs:
+- Use `--packs` multiple times, e.g., `--packs p/secrets --packs p/owasp-top-ten`.
+
 Outputs
 - JSON (default)
 - HTML (summary table with severity counts)

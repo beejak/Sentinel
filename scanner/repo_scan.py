@@ -21,7 +21,7 @@ def _run(cmd: List[str], cwd: Optional[str] = None, timeout: Optional[int] = Non
     return p.returncode, out, err
 
 
-def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool) -> Dict[str, Any]:
+def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool, packs: Optional[List[str]] = None) -> Dict[str, Any]:
     work: Optional[str] = None
     cleanup = False
     try:
@@ -40,7 +40,7 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
             return {"error": "no_input", "message": "Provide --path or --repo"}
 
         # Recommended configs (falls back to auto)
-        configs = [
+        configs = packs if packs else [
             "p/secrets",
             "p/ci",
             "p/r2c-security-audit",

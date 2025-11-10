@@ -84,6 +84,7 @@ def main() -> None:
     p_repo.add_argument("--out", help="Write findings JSON to file")
     p_repo.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
     p_repo.add_argument("--html", help="Write HTML report to file")
+    p_repo.add_argument("--packs", action="append", help="Semgrep rule packs to include (repeatable). Defaults to recommended packs.")
     p_probe.add_argument("target", help="Target base URL")
     p_probe.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
@@ -192,7 +193,7 @@ def main() -> None:
 
     if args.command == "repo-scan":
         from scanner.repo_scan import repo_scan as _repo_scan, repo_scan_to_sarif, repo_scan_to_html
-        result = _repo_scan(path=getattr(args, "path", None), repo=getattr(args, "repo", None), semgrep_docker=getattr(args, "semgrep_docker", False))
+        result = _repo_scan(path=getattr(args, "path", None), repo=getattr(args, "repo", None), semgrep_docker=getattr(args, "semgrep_docker", False), packs=getattr(args, "packs", None))
         out_path = getattr(args, "out", None)
         if out_path:
             with open(out_path, "w", encoding="utf-8") as f:
