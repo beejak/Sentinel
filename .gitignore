@@ -16,3 +16,16 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+# Go workspace files
+go.work
+go.work.sum

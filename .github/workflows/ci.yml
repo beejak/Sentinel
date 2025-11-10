@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  python:
+    name: Python - lint & smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Syntax check
+        run: python -m compileall .
+      - name: CLI help
+        run: python main.py --help
+  go:
+    name: Go - build harnesses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Build testharness
+        run: go build ./...
+        working-directory: testharness
+      - name: Build vuln-mcp
+        run: go build ./...
+        working-directory: vuln-mcp
