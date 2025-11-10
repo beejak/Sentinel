@@ -39,11 +39,22 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
         else:
             return {"error": "no_input", "message": "Provide --path or --repo"}
 
-        # Prefer local semgrep if available, else docker if requested/available
+        # Recommended configs (falls back to auto)
+        configs = [
+            "p/secrets",
+            "p/ci",
+            "p/r2c-security-audit",
+            "p/owasp-top-ten",
+        ]
+        conf_args: List[str] = []
+        for c in configs:
+            conf_args += ["--config", c]
+
+        # Prefer local semgrep; else docker if requested/available
         use_docker = False
         semgrep_cmd: List[str]
         if _which("semgrep") and not semgrep_docker:
-            semgrep_cmd = ["semgrep", "scan", "--config", "auto", "--json", "--quiet", work]
+            semgrep_cmd = ["semgrep", "scan", *conf_args, "--json", "--quiet", work]
         else:
             if not _which("docker"):
                 return {"error": "semgrep_missing", "message": "Install semgrep or docker to run repo-scan"}
@@ -52,11 +63,23 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
                 "docker", "run", "--rm",
                 "-v", f"{work}:/src",
                 "returntocorp/semgrep:latest",
-                "semgrep", "scan", "--config", "auto", "--json", "--quiet", "/src"
+                "semgrep", "scan", *conf_args, "--json", "--quiet", "/src"
             ]
         code, out, err = _run(semgrep_cmd, cwd=work)
         if code not in (0, 1):  # semgrep returns 1 when findings are present
-            return {"error": "semgrep_failed", "stderr": err}
+            # fallback to auto
+            if _which("semgrep") and not use_docker:
+                semgrep_cmd = ["semgrep", "scan", "--config", "auto", "--json", "--quiet", work]
+            else:
+                semgrep_cmd = [
+                    "docker", "run", "--rm",
+                    "-v", f"{work}:/src",
+                    "returntocorp/semgrep:latest",
+                    "semgrep", "scan", "--config", "auto", "--json", "--quiet", "/src"
+                ]
+            code, out, err = _run(semgrep_cmd, cwd=work)
+            if code not in (0,1):
+                return {"error": "semgrep_failed", "stderr": err}
         try:
             data = json.loads(out)
         except Exception:
@@ -69,6 +92,7 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
             if sev not in ("low", "medium", "high"):
                 sev = {"INFO":"low","WARNING":"medium","ERROR":"high"}.get(str(sev).upper(), "medium")
             title = r.get("extra", {}).get("message") or rule_id
+            loc = r.get("extra", {}).get("lines", "")
             findings.append({
                 "ruleId": f"SEMGREP::{rule_id}",
                 "severity": sev,
@@ -77,6 +101,7 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
                     "path": (r.get("path") or r.get("extra", {}).get("path")),
                     "start": r.get("start"),
                     "end": r.get("end"),
+                    "lines": loc,
                 },
             })
         return {"engine": "semgrep", "path": work, "findings": findings, "docker": use_docker}
@@ -84,3 +109,69 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool)
         if cleanup and work and os.path.isdir(work):
             # Keep for debugging? For now we do not delete automatically; caller can manage tempdir.
             pass
+
+
+def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
+    findings = result.get("findings", [])
+    rules: Dict[str, Dict[str, Any]] = {}
+    for f in findings:
+        rid = f.get("ruleId")
+        if rid and rid not in rules:
+            rules[rid] = {
+                "id": rid,
+                "name": rid,
+                "shortDescription": {"text": f.get("title", rid)},
+                "defaultConfiguration": {"level": {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning")},
+            }
+    results = []
+    for f in findings:
+        results.append({
+            "ruleId": f.get("ruleId"),
+            "level": {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning"),
+            "message": {"text": f.get("title")},
+            "locations": [
+                {"physicalLocation": {"artifactLocation": {"uri": str((f.get("evidence") or {}).get("path") or '')}}}
+            ],
+            "properties": {"evidence": f.get("evidence")},
+        })
+    return {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [{"tool": {"driver": {"name": "mcp-scanner/semgrep", "rules": list(rules.values())}}, "results": results}],
+    }
+
+
+def repo_scan_to_html(result: Dict[str, Any]) -> str:
+    import html
+    fnds = result.get("findings", [])
+    hi = sum(1 for f in fnds if f.get("severity") == "high")
+    me = sum(1 for f in fnds if f.get("severity") == "medium")
+    lo = sum(1 for f in fnds if f.get("severity") == "low")
+    def _sev_cls(s: str) -> str:
+        return {'high':'sev-high','medium':'sev-medium','low':'sev-low'}.get(s,'')
+    rows = "\n".join(
+        f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{html.escape(str((f.get('evidence') or {}).get('path') or ''))}</td></tr>"
+        for f in fnds
+    )
+    return f"""
+<!doctype html>
+<html><head><meta charset='utf-8'>
+<title>Sentinel Repo Scan</title>
+<style>body{{font-family:system-ui,Arial,sans-serif;margin:2rem}} table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #ddd;padding:.5rem}} th{{background:#f8f8f8}} .sev-high{{color:#e74c3c}} .sev-medium{{color:#f39c12}} .sev-low{{color:#3498db}} .badge{{display:inline-block;padding:.1rem .4rem;border-radius:.25rem;background:#f0f0f0;margin-right:.5rem}}</style>
+</head>
+<body>
+<h1>Sentinel Repo Scan</h1>
+<p><strong>Path:</strong> {html.escape(str(result.get('path','')))}</p>
+<p>
+  <span class='badge sev-high'>High: {hi}</span>
+  <span class='badge sev-medium'>Medium: {me}</span>
+  <span class='badge sev-low'>Low: {lo}</span>
+</p>
+<h2>Findings</h2>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>Path</th></tr></thead>
+<tbody>
+{rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
+</tbody></table>
+<p style='margin-top:1rem;color:#666'>Powered by Semgrep rule packs (secrets, ci, security-audit, OWASP Top Ten).</p>
+</body></html>
+"""

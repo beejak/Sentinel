@@ -83,6 +83,7 @@ def main() -> None:
     p_repo.add_argument("--semgrep-docker", action="store_true", help="Run Semgrep via Docker image (requires Docker)")
     p_repo.add_argument("--out", help="Write findings JSON to file")
     p_repo.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
+    p_repo.add_argument("--html", help="Write HTML report to file")
     p_probe.add_argument("target", help="Target base URL")
     p_probe.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
@@ -190,7 +191,7 @@ def main() -> None:
         return
 
     if args.command == "repo-scan":
-        from scanner.repo_scan import repo_scan as _repo_scan
+        from scanner.repo_scan import repo_scan as _repo_scan, repo_scan_to_sarif, repo_scan_to_html
         result = _repo_scan(path=getattr(args, "path", None), repo=getattr(args, "repo", None), semgrep_docker=getattr(args, "semgrep_docker", False))
         out_path = getattr(args, "out", None)
         if out_path:
@@ -198,6 +199,12 @@ def main() -> None:
                 f.write(json.dumps(result, indent=2))
         else:
             print(json.dumps(result, indent=2))
+        if getattr(args, "sarif", None):
+            with open(args.sarif, "w", encoding="utf-8") as f:
+                f.write(json.dumps(repo_scan_to_sarif(result), indent=2))
+        if getattr(args, "html", None):
+            with open(args.html, "w", encoding="utf-8") as f:
+                f.write(repo_scan_to_html(result))
         return
 
     if args.command == "auth-dynamic":
