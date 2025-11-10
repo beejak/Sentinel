@@ -46,3 +46,6 @@ This document lists available probes, their rule IDs, purpose, and typical outco
 
 - PROBE-015 — SecurityHeadersProbe (low)
   Checks root response for common security headers (X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy).
+
+- PROBE-016 — ToolSchemaValidationProbe (high/medium/low)
+  Validates /tools JSON structure and policy. Flags dangerous tool names (exec/shell/system etc.), missing read_file roots, and missing fetch_url blocked list.

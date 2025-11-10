@@ -190,13 +190,8 @@ def main() -> None:
         return
 
     if args.command == "repo-scan":
-        # Placeholder implementation; prefer Semgrep if available
-        result = {
-            "command": "repo-scan",
-            "path": getattr(args, "path", None),
-            "repo": getattr(args, "repo", None),
-            "notes": "Static analysis not yet implemented. Install Semgrep or use --semgrep-docker; planned support includes secrets, supply-chain, and unsafe patterns.",
-        }
+        from scanner.repo_scan import repo_scan as _repo_scan
+        result = _repo_scan(path=getattr(args, "path", None), repo=getattr(args, "repo", None), semgrep_docker=getattr(args, "semgrep_docker", False))
         out_path = getattr(args, "out", None)
         if out_path:
             with open(out_path, "w", encoding="utf-8") as f:
@@ -263,10 +258,12 @@ def main() -> None:
             out_sarif=getattr(args, "sarif", None),
             enable_private_egress_checks=getattr(args, "enable_private_egress_checks", False),
         )
+    sc = _scorecard((disc or {}).get("oauth_summary", {})) if isinstance(disc, dict) else {"score": 0, "checks": []}
     result = {
         "target": target,
         "discovery": disc,
         "probes": probes,
+        "scorecard": sc,
     }
     if getattr(args, "out", None):
         with open(args.out, "w", encoding="utf-8") as f:
@@ -286,6 +283,44 @@ def main() -> None:
         raise SystemExit(1)
 
 
+def _scorecard(oa: Dict[str, Any]) -> Dict[str, Any]:
+    items = []
+    score = 0
+    total = 0
+    def add(name: str, ok: bool, weight: int, note: str) -> None:
+        nonlocal score, total
+        total += weight
+        if ok:
+            score += weight
+        items.append({"check": name, "ok": ok, "weight": weight, "note": note})
+    # Basic checks
+    add("issuer_present", bool(oa.get("issuer")), 5, "OIDC issuer present")
+    add("authz_endpoint_present", bool(oa.get("authorization_endpoint")), 10, "Authorization endpoint present")
+    add("token_endpoint_present", bool(oa.get("token_endpoint")), 10, "Token endpoint present")
+    # HTTPS for endpoints
+    def _https(u: str) -> bool:
+        from urllib.parse import urlparse
+        try:
+            return (urlparse(u or "").scheme or "").lower() == "https"
+        except Exception:
+            return False
+    add("authz_https", _https(oa.get("authorization_endpoint", "")), 10, "Authorization endpoint uses HTTPS")
+    add("token_https", _https(oa.get("token_endpoint", "")), 10, "Token endpoint uses HTTPS")
+    # PKCE S256 support
+    ccms = oa.get("code_challenge_methods_supported") or []
+    add("pkce_s256", ("S256" in ccms) if isinstance(ccms, list) else False, 15, "PKCE S256 supported")
+    # Response/grant types
+    rts = oa.get("response_types_supported") or []
+    gts = oa.get("grant_types_supported") or []
+    add("code_flow_supported", ("code" in rts) or ("authorization_code" in gts), 10, "Authorization Code flow supported")
+    # JWKS present
+    add("jwks_uri_present", bool(oa.get("jwks_uri")), 10, "JWKS URI present")
+    # Registration endpoint exposure (informational)
+    add("dynamic_registration", bool(oa.get("registration_endpoint")), 5, "Dynamic client registration available")
+    pct = int(round(100 * (score / max(total, 1))))
+    return {"score": pct, "checks": items}
+
+
 def _render_markdown_scan(result: Dict[str, Any]) -> str:
     target = result.get("target")
     disc = result.get("discovery", {})
@@ -302,7 +337,11 @@ def _render_markdown_scan(result: Dict[str, Any]) -> str:
     for k in ["issuer", "authorization_endpoint", "token_endpoint", "jwks_uri", "registration_endpoint"]:
         if k in oa and oa[k]:
             lines.append(f"- {k}: {oa[k]}")
+    # Scorecard
+    sc = result.get("scorecard", {})
     lines += [
+        "",
+        f"## Standards Scorecard: {sc.get('score', 0)}%",
         "",
         "## Findings",
     ]
@@ -318,7 +357,9 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     import html
     target = html.escape(str(result.get("target", "")))
     oa = (result.get("discovery", {}).get("oauth_summary") or {})
+    sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
+    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
     rows = "\n".join(
         f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td></tr>"
         for f in findings
@@ -327,7 +368,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <!doctype html>
 <html><head><meta charset='utf-8'>
 <title>Sentinel Scan Report</title>
-<style>body{{font-family:system-ui,Arial,sans-serif;margin:2rem}} table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #ddd;padding:.5rem}} th{{background:#f8f8f8}}</style>
+<style>body{{font-family:system-ui,Arial,sans-serif;margin:2rem}} table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #ddd;padding:.5rem}} th{{background:#f8f8f8}} .sev-high{{color:#e74c3c}} .sev-medium{{color:#f39c12}} .sev-low{{color:#3498db}} .badge{{display:inline-block;padding:.1rem .4rem;border-radius:.25rem;background:#f0f0f0;margin-right:.5rem}}</style>
 </head>
 <body>
 <h1>Sentinel Scan Report</h1>
@@ -338,6 +379,11 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <li>authorization_endpoint: {html.escape(str(oa.get('authorization_endpoint','')))}</li>
 <li>token_endpoint: {html.escape(str(oa.get('token_endpoint','')))}</li>
 <li>jwks_uri: {html.escape(str(oa.get('jwks_uri','')))}</li>
+</ul>
+<h2>Standards Scorecard</h2>
+<p><span class='badge'>Score: {sc.get('score',0)}%</span></p>
+<ul>
+{''.join(f"<li>{html.escape(str(c.get('check')))} — {'OK' if c.get('ok') else 'MISS'} ({c.get('note')})</li>" for c in (sc.get('checks') or []))}
 </ul>
 <h2>Findings</h2>
 <table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th></tr></thead>

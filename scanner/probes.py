@@ -569,6 +569,47 @@ class SecurityHeadersProbe(Probe):
             return [_result(self.id, "low", "Error checking security headers", {"error": str(e)})]
 
 
+class ToolSchemaValidationProbe(Probe):
+    id = "PROBE-016"
+    intrusive = False
+
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        origin = _origin(target)
+        findings: List[Dict[str, Any]] = []
+        try:
+            r_tools = http.get(origin + "/tools", timeout=timeout)
+        except requests.RequestException as e:
+            return [_result(self.id, "low", "Error fetching /tools for schema validation", {"error": str(e)})]
+        try:
+            data = r_tools.json()
+        except Exception:
+            return [_result(self.id, "medium", "/tools is not JSON", {"status": r_tools.status_code})]
+        tools = (data or {}).get("tools")
+        policy = (data or {}).get("policy", {})
+        if not isinstance(tools, list):
+            findings.append(_result(self.id, "medium", "Missing or invalid 'tools' array", {}))
+            return findings
+        # Check for dangerous tool names and missing policies
+        dangerous = {"exec", "shell", "spawn", "system", "eval", "download_and_execute"}
+        for t in tools:
+            name = (t or {}).get("name")
+            if name and any(name.lower() == d for d in dangerous):
+                findings.append(_result(self.id, "high", "Dangerous tool exposed", {"tool": name}))
+        # read_file policy roots
+        rf_pol = (policy.get("read_file") or {}) if isinstance(policy, dict) else {}
+        roots = rf_pol.get("roots") if isinstance(rf_pol, dict) else None
+        if roots is None:
+            findings.append(_result(self.id, "medium", "Missing policy.roots for read_file", {}))
+        elif not any(isinstance(x, str) for x in roots):
+            findings.append(_result(self.id, "medium", "Invalid roots format for read_file", {"roots": roots}))
+        # fetch_url policy (blocked private ranges)
+        fu_pol = (policy.get("fetch_url") or {}) if isinstance(policy, dict) else {}
+        blocked = (fu_pol.get("blocked") or []) if isinstance(fu_pol, dict) else []
+        if not blocked:
+            findings.append(_result(self.id, "low", "No blocked list for fetch_url (SSRF)", {}))
+        return findings
+
+
 class InvalidAuthProbe(Probe):
     id = "PROBE-010"
     intrusive = False
@@ -610,6 +651,7 @@ def run_probes(*, target: str, profile: str = "baseline", request_timeout: int =
         MissingContentTypeProbe(),
         SSRFProbe(),
         SecurityHeadersProbe(),
+        ToolSchemaValidationProbe(),
     ]
     if profile == "intrusive":
         probes.append(OversizePayloadProbe(size_kb=512))

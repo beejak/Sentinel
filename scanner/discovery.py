@@ -106,6 +106,9 @@ def discover(target: str) -> Dict[str, Any]:
         "jwks_uri": pick(oa, "jwks_uri") or pick(oidc, "jwks_uri"),
         "registration_endpoint": pick(oa, "registration_endpoint") or pick(oidc, "registration_endpoint"),
         "scopes_supported": pick(oa, "scopes_supported") or pick(oidc, "scopes_supported"),
+        "response_types_supported": pick(oa, "response_types_supported") or pick(oidc, "response_types_supported"),
+        "grant_types_supported": pick(oa, "grant_types_supported") or pick(oidc, "grant_types_supported"),
+        "code_challenge_methods_supported": pick(oa, "code_challenge_methods_supported") or pick(oidc, "code_challenge_methods_supported"),
         "authorization_servers": pick(pr, "authorization_servers"),
     }
 
