@@ -23,7 +23,22 @@ Keys
   - proxy: url
     - Applies to http and https.
   - timeout: seconds (default: 10)
-  - headers: map of additional headers
+- headers: map of additional headers
+  - Safe defaults: User-Agent, Accept
+  - Commented templates provided in sentinel.yml for Authorization, X-API-Key, Proxy-Authorization, X-Request-ID
+
+Environment variables
+
+Common header templates (enable one of these in sentinel.yml or via CLI/env)
+- Authorization: Bearer <TOKEN>
+- X-API-Key: <KEY>
+- Proxy-Authorization: Basic <BASE64_USER_PASS>
+- X-Request-ID: <RUN_ID>
+
+Hints
+- Prefer CLI: --header "Authorization: Bearer <TOKEN>"
+- Or env: SENTINEL_HTTP_HEADER_AUTHORIZATION="Bearer <TOKEN>"
+- Keep sensitive headers commented in sentinel.yml to avoid accidental commits/leaks.
 
 Environment variables
 - SENTINEL_OFFLINE=true|false

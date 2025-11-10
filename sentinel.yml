@@ -9,3 +9,8 @@ http:
   timeout: 10
   headers:
     User-Agent: "sentinel/0.1 (+https://example.invalid)"
+    Accept: "application/json, */*"
+    # Authorization: "Bearer <TOKEN>"
+    # X-API-Key: "<KEY>"
+    # Proxy-Authorization: "Basic <BASE64_USER_PASS>"
+    # X-Request-ID: "<RUN_ID>"
