@@ -1,0 +1,11 @@
+offline: false
+policy:
+  enable_private_egress_checks: false
+http:
+  verify: true
+  # cert: 
+  # key: 
+  # proxy: http://127.0.0.1:8080
+  timeout: 10
+  headers:
+    User-Agent: "sentinel/0.1 (+https://example.invalid)"

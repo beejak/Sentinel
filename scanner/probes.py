@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
+from . import http
 
 import base64
 import hashlib
@@ -61,7 +62,7 @@ class BogusTokenProbe(Probe):
     def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
-            r = requests.get(origin, headers={"Authorization": "Bearer X_BOGUS_"}, timeout=timeout, allow_redirects=False)
+            r = http.get(origin, headers={"Authorization": "Bearer X_BOGUS_"}, timeout=timeout, allow_redirects=False)
             if r.status_code not in (401, 403):
                 return [_result(self.id, "high", "Resource accepted or redirected with bogus token", {"status": r.status_code})]
             return []
@@ -78,7 +79,7 @@ class MalformedRequestProbe(Probe):
         findings: List[Dict[str, Any]] = []
         # Send invalid Content-Type and JSON body to GET
         try:
-            r = requests.get(origin, headers={"Content-Type": "application/json"}, data="{not json}", timeout=timeout)
+            r = http.get(origin, headers={"Content-Type": "application/json"}, data="{not json}", timeout=timeout)
             if r.status_code >= 500:
                 findings.append(_result(self.id, "medium", "Server 5xx on malformed GET", {"status": r.status_code}))
         except requests.RequestException as e:
@@ -98,7 +99,7 @@ class OversizePayloadProbe(Probe):
         findings: List[Dict[str, Any]] = []
         data = b"x" * (self.size_kb * 1024)
         try:
-            r = requests.post(origin, data=data, headers={"Content-Type": "text/plain"}, timeout=timeout)
+            r = http.post(origin, data=data, headers={"Content-Type": "text/plain"}, timeout=timeout)
             if r.status_code >= 500:
                 findings.append(_result(self.id, "medium", "Server 5xx on oversize POST", {"status": r.status_code, "size_kb": self.size_kb}))
         except requests.RequestException as e:
@@ -113,7 +114,7 @@ class CORSPreflightProbe(Probe):
     def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
-            r = requests.options(
+            r = http.options(
                 origin,
                 headers={
                     "Origin": "http://example.com",
@@ -164,7 +165,7 @@ def _oauth_dynamic_register(issuer: str, redirect_uri: str, timeout: int) -> Opt
         "response_types": ["code"],
         "client_name": "mcp-scanner-probes",
     }
-    r = requests.post(reg, json=body, headers={"Accept": "application/json"}, timeout=timeout)
+    r = http.post(reg, json=body, headers={"Accept": "application/json"}, timeout=timeout)
     j = None
     try:
         j = r.json()
@@ -191,7 +192,7 @@ def _oauth_authorize_get_code(issuer: str, client_id: str, redirect_uri: str, sc
         "code_challenge_method": "S256",
         "resource": resource,
     }
-    r = requests.get(authz, params=params, timeout=timeout, allow_redirects=False)
+    r = http.get(authz, params=params, timeout=timeout, allow_redirects=False)
     if r.status_code not in (302, 303):
         return None, False, "", ""
     loc = r.headers.get("Location", "")
@@ -213,7 +214,7 @@ def _oauth_exchange_token(issuer: str, code: str, client_id: str, verifier: str,
         "code_verifier": verifier,
         "resource": resource,
     }
-    return requests.post(token, data=data, headers={"Accept": "application/json"}, timeout=timeout)
+    return http.post(token, data=data, headers={"Accept": "application/json"}, timeout=timeout)
 
 
 class ToolGuardrailsProbe(Probe):
@@ -243,7 +244,7 @@ class ToolGuardrailsProbe(Probe):
 
         # Query tools
         try:
-            r_tools = requests.get(origin + "/tools", timeout=timeout)
+            r_tools = http.get(origin + "/tools", timeout=timeout)
             if r_tools.status_code >= 500:
                 return [_result(self.id, "medium", "Server 5xx on /tools", {"status": r_tools.status_code})]
         except requests.RequestException as e:
@@ -257,7 +258,7 @@ class ToolGuardrailsProbe(Probe):
         findings: List[Dict[str, Any]] = []
         for payload in bad_args:
             try:
-                r = requests.post(
+                r = http.post(
                     origin + "/tool/run",
                     json=payload,
                     headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"},
@@ -374,7 +375,7 @@ class MethodMatrixProbe(Probe):
         except requests.RequestException as e:
             findings.append(_result(self.id, "low", "Error on GET /tool/run", {"error": str(e)}))
         try:
-            r_put_tool = requests.put(origin + "/tool/run", timeout=timeout)
+            r_put_tool = http.request("PUT", origin + "/tool/run", timeout=timeout)
             if 200 <= r_put_tool.status_code < 300:
                 findings.append(_result(self.id, "high", "PUT allowed on /tool/run (should be POST only)", {"status": r_put_tool.status_code}))
             elif r_put_tool.status_code not in (401, 403, 405):
@@ -382,7 +383,7 @@ class MethodMatrixProbe(Probe):
         except requests.RequestException as e:
             findings.append(_result(self.id, "low", "Error on PUT /tool/run", {"error": str(e)}))
         try:
-            r_get_tools = requests.get(origin + "/tools", timeout=timeout)
+            r_get_tools = http.get(origin + "/tools", timeout=timeout)
             if r_get_tools.status_code >= 500:
                 findings.append(_result(self.id, "medium", "/tools GET caused 5xx", {"status": r_get_tools.status_code}))
         except requests.RequestException as e:
@@ -404,7 +405,7 @@ class ContentTypeMatrixProbe(Probe):
         ]
         for headers, body in bad_ct_cases:
             try:
-                r = requests.post(
+                r = http.post(
                     origin + "/tool/run",
                     headers=headers,
                     json=(body if isinstance(body, dict) else None),
@@ -435,7 +436,7 @@ class TraceMethodProbe(Probe):
     def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
-            r = requests.request("TRACE", origin + "/tool/run", timeout=timeout)
+            r = http.request("TRACE", origin + "/tool/run", timeout=timeout)
             if 200 <= r.status_code < 300:
                 return [_result(self.id, "high", "TRACE allowed on /tool/run", {"status": r.status_code})]
             if r.status_code not in (401, 403, 405):
@@ -453,7 +454,7 @@ class MissingContentTypeProbe(Probe):
         origin = _origin(target)
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
-            r = requests.post(origin + "/tool/run", data=__import__("json").dumps(payload), timeout=timeout)  # no Content-Type
+            r = http.post(origin + "/tool/run", data=__import__("json").dumps(payload), timeout=timeout)
             if 200 <= r.status_code < 300:
                 return [_result(self.id, "high", "Accepted POST without Content-Type", {"status": r.status_code})]
             elif r.status_code >= 500:
@@ -479,7 +480,7 @@ class LargeHeaderProbe(Probe):
         headers = {"Content-Type": "application/json", "X-Long": "a" * 8192}
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
-            r = requests.post(origin + "/tool/run", json=payload, headers=headers, timeout=timeout)
+            r = http.post(origin + "/tool/run", json=payload, headers=headers, timeout=timeout)
             if r.status_code >= 500:
                 return [_result(self.id, "medium", "5xx on large header", {"status": r.status_code})]
             return []
@@ -519,7 +520,7 @@ class SSRFProbe(Probe):
         for url in ssrf_targets:
             payload = {"tool": "fetch_url", "args": {"url": url}}
             try:
-                r = requests.post(
+                r = http.post(
                     origin + "/tool/run",
                     json=payload,
                     headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"},
@@ -549,7 +550,7 @@ class SecurityHeadersProbe(Probe):
     def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         origin = _origin(target)
         try:
-            r = requests.get(origin, timeout=timeout)
+            r = http.get(origin, timeout=timeout)
             headers = {k.lower(): v for k, v in r.headers.items()}
             missing = []
             expected = [
@@ -576,7 +577,7 @@ class InvalidAuthProbe(Probe):
         origin = _origin(target)
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
-            r = requests.post(origin + "/tool/run", json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
+            r = http.post(origin + "/tool/run", json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
             if 200 <= r.status_code < 300:
                 return [_result(self.id, "high", "/tool/run succeeded without Authorization header", {"status": r.status_code})]
             if r.status_code not in (401, 403, 405, 429):

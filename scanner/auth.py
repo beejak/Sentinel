@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 import requests
+from . import http
 
 from .discovery import _origin, _get
 
@@ -156,7 +157,7 @@ def run_auth_flow(*, target: str, client_id: str, scopes: str, redirect_port: in
             "resource": resource,
         }
         try:
-            r = requests.post(token, data=data, headers={"Accept": "application/json"}, timeout=20)
+            r = http.post(token, data=data, headers={"Accept": "application/json"}, timeout=20)
             token_resp = {
                 "status": r.status_code,
                 "headers": dict(r.headers),
@@ -181,7 +182,7 @@ def run_auth_flow(*, target: str, client_id: str, scopes: str, redirect_port: in
     status, headers, _, _ = _get(origin)
     _ = headers  # keep for potential future use
     try:
-        r2 = requests.get(origin, headers={"Authorization": f"Bearer {bogus}"}, timeout=10, allow_redirects=False)
+        r2 = http.get(origin, headers={"Authorization": f"Bearer {bogus}"}, timeout=10, allow_redirects=False)
         if r2.status_code not in (401, 403):
             findings.append({"ruleId": "AUTH-005", "severity": "high", "title": "Resource accepted or redirected with bogus token", "evidence": {"status": r2.status_code}})
     except requests.RequestException as e:

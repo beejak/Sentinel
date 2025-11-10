@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import requests
+from . import http
 
 USER_AGENT = "mcp-scanner/0.1 (+https://example.invalid)"
 TIMEOUT = 10
@@ -23,7 +24,7 @@ def _origin(url: str) -> str:
 def _get(url: str) -> Tuple[int, Dict[str, str], Optional[Any], Optional[str]]:
     try:
         _logger.debug("GET %s", url)
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json, */*"}, timeout=TIMEOUT, allow_redirects=True)
+        resp = http.get(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json, */*"}, timeout=TIMEOUT, allow_redirects=True)
         status = resp.status_code
         headers = {k: v for k, v in resp.headers.items()}
         data: Optional[Any] = None

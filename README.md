@@ -65,6 +65,7 @@ Examples:
 
 Docs:
 - Usage guide: `docs/USAGE.md`
+- Config guide: `docs/CONFIG.md`
 - Probe catalog: `docs/PROBES.md`
 - Architecture: `docs/ARCHITECTURE.md`
 - Roadmap: `docs/ROADMAP.md`

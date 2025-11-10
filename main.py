@@ -42,6 +42,12 @@ def main() -> None:
     common.add_argument("--log-format", choices=["text", "json"], default="text", help="Log output format")
     common.add_argument("--offline", action="store_true", help="Disable all network activity (skip live endpoint checks)")
     common.add_argument("--enable-private-egress-checks", action="store_true", help="Opt-in to private-network SSRF/egress tests")
+    common.add_argument("--config", help="Path to sentinel.yml (config-as-code)")
+    common.add_argument("--verify", help="TLS verify: true/false or path to CA bundle")
+    common.add_argument("--cert", help="Client certificate path (PEM or PFX if supported)")
+    common.add_argument("--key", help="Client private key path (PEM)")
+    common.add_argument("--proxy", help="HTTP/HTTPS proxy URL")
+    common.add_argument("--header", action="append", help="Additional header, e.g., 'Name: Value' (can be repeated)")
 
     # discover subcommand
     p_discover = subparsers.add_parser("discover", parents=[common], help="Discover OAuth metadata and capabilities for an MCP server")
@@ -101,6 +107,43 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
 
     args = parser.parse_args()
+
+    # Load config and apply CLI overrides
+    from scanner.config import load_config, get_config, set_config
+    cfg = load_config(getattr(args, "config", None))
+    # CLI overrides
+    http_cfg = dict(cfg.get("http", {}))
+    if getattr(args, "verify", None) is not None:
+        val = str(getattr(args, "verify")).strip()
+        if val.lower() in ("true", "1", "yes", "on"):
+            http_cfg["verify"] = True
+        elif val.lower() in ("false", "0", "no", "off"):
+            http_cfg["verify"] = False
+        else:
+            http_cfg["verify"] = val
+    if getattr(args, "cert", None):
+        http_cfg["cert"] = args.cert
+    if getattr(args, "key", None):
+        http_cfg["key"] = args.key
+    if getattr(args, "proxy", None):
+        http_cfg["proxy"] = args.proxy
+    if getattr(args, "header", None):
+        headers = dict(http_cfg.get("headers", {}))
+        for h in (args.header or []):
+            if ":" in h:
+                name, val = h.split(":", 1)
+                headers[name.strip()] = val.strip()
+        http_cfg["headers"] = headers
+    # Policy/flags
+    policy = dict(cfg.get("policy", {}))
+    if getattr(args, "enable_private_egress_checks", False):
+        policy["enable_private_egress_checks"] = True
+    offline = getattr(args, "offline", None)
+    if offline is not None:
+        cfg["offline"] = bool(offline)
+    cfg["http"] = http_cfg
+    cfg["policy"] = policy
+    set_config(cfg)
 
     # Configure logging
     log_level = getattr(args, "log_level", None) or "INFO"
