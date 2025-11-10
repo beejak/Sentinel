@@ -16,32 +16,63 @@ from .discovery import discover
 
 Severity = str  # "low" | "medium" | "high"
 
+# Minimal rule metadata for SARIF enrichment
+RULE_META: Dict[str, Dict[str, Any]] = {
+    "PROBE-001": {"cwe": "CWE-287", "help": "docs/PROBES.md"},  # Improper Authentication
+    "PROBE-002": {"cwe": "CWE-20",  "help": "docs/PROBES.md"},  # Improper Input Validation
+    "PROBE-003": {"cwe": "CWE-770", "help": "docs/PROBES.md"},  # Uncontrolled Resource Consumption
+    "PROBE-004": {"cwe": "CWE-942","help": "docs/PROBES.md"},  # Permissive CORS Policy
+    "PROBE-005": {"cwe": "CWE-22",  "help": "docs/PROBES.md"},  # Path Traversal (policy)
+    "PROBE-006": {"cwe": "CWE-294", "help": "docs/PROBES.md"},  # Authentication Bypass by Replay
+    "PROBE-007": {"cwe": "CWE-307", "help": "docs/PROBES.md"},  # Excessive Attempts / Rate Limit
+    "PROBE-008": {"cwe": "CWE-749","help": "docs/PROBES.md"},  # Exposed Dangerous Method
+    "PROBE-009": {"cwe": "CWE-436","help": "docs/PROBES.md"},  # Interpretation Conflict
+    "PROBE-010": {"cwe": "CWE-306","help": "docs/PROBES.md"},  # Missing Authentication
+    "PROBE-011": {"cwe": "CWE-200","help": "docs/PROBES.md"},  # Information Exposure via TRACE
+    "PROBE-012": {"cwe": "CWE-345","help": "docs/PROBES.md"},  # Insufficient Verification of Data Authenticity
+    "PROBE-013": {"cwe": "CWE-770","help": "docs/PROBES.md"},  # Uncontrolled Resource Consumption
+    "PROBE-014": {"cwe": "CWE-918","help": "docs/PROBES.md"},  # SSRF
+    "PROBE-015": {"cwe": "CWE-693","help": "docs/PROBES.md"},  # Protection Mechanism Failure (headers)
+    "PROBE-016": {"cwe": "CWE-1220","help": "docs/PROBES.md"}, # Insufficient Granularity of Access Control (policy)
+}
+
 
 def _result(rule: str, severity: Severity, title: str, evidence: Dict[str, Any]) -> Dict[str, Any]:
     return {"ruleId": rule, "severity": severity, "title": title, "evidence": evidence}
 
 
 def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
-    rules = {}
+    rules: Dict[str, Dict[str, Any]] = {}
     for f in findings:
         rid = f.get("ruleId")
         if rid and rid not in rules:
-            rules[rid] = {"id": rid, "name": rid, "shortDescription": {"text": f.get("title", rid)}}
+            meta = RULE_META.get(rid, {})
+            level = {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning")
+            rules[rid] = {
+                "id": rid,
+                "name": rid,
+                "shortDescription": {"text": f.get("title", rid)},
+                "fullDescription": {"text": f.get("title", rid)},
+                "helpUri": meta.get("help"),
+                "properties": {"cwe": meta.get("cwe")},
+                "defaultConfiguration": {"level": level},
+            }
+    results = []
+    for f in findings:
+        level = {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning")
+        results.append({
+            "ruleId": f.get("ruleId"),
+            "level": level,
+            "message": {"text": f.get("title")},
+            "properties": {"evidence": f.get("evidence")},
+        })
     return {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "runs": [
             {
                 "tool": {"driver": {"name": "mcp-scanner", "rules": list(rules.values())}},
-                "results": [
-                    {
-                        "ruleId": f.get("ruleId"),
-                        "level": {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning"),
-                        "message": {"text": f.get("title")},
-                        "properties": {"evidence": f.get("evidence")},
-                    }
-                    for f in findings
-                ],
+                "results": results,
             }
         ],
     }

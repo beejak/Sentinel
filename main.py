@@ -360,8 +360,14 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
     sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
+    # Counts
+    hi = sum(1 for f in findings if (f.get('severity') == 'high'))
+    me = sum(1 for f in findings if (f.get('severity') == 'medium'))
+    lo = sum(1 for f in findings if (f.get('severity') == 'low'))
+    def _sev_cls(s: str) -> str:
+        return {'high':'sev-high','medium':'sev-medium','low':'sev-low'}.get(s,'')
     rows = "\n".join(
-        f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td></tr>"
+        f"<tr><td><a href='docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td></tr>"
         for f in findings
     )
     return f"""
@@ -373,6 +379,11 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <body>
 <h1>Sentinel Scan Report</h1>
 <p><strong>Target:</strong> {target}</p>
+<p>
+  <span class='badge sev-high'>High: {hi}</span>
+  <span class='badge sev-medium'>Medium: {me}</span>
+  <span class='badge sev-low'>Low: {lo}</span>
+</p>
 <h2>OAuth Summary</h2>
 <ul>
 <li>issuer: {html.escape(str(oa.get('issuer','')))}</li>
@@ -388,8 +399,9 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <h2>Findings</h2>
 <table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th></tr></thead>
 <tbody>
-{rows if rows else '<tr><td colspan="3">No findings</td></tr>'}
+{rows if rows else '<tr><td colspan=\"3\">No findings</td></tr>'}
 </tbody></table>
+<p style='margin-top:1rem;color:#666'>Legend: <span class='sev-high'>High</span>, <span class='sev-medium'>Medium</span>, <span class='sev-low'>Low</span>. See <a href='docs/PROBES.md' target='_blank'>Probe Catalog</a> for details.</p>
 </body></html>
 """
 
