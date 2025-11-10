@@ -33,6 +33,8 @@ essential_keys = {
     "offline": False,
     "policy": {
         "enable_private_egress_checks": False,
+        # If true, strip Authorization header unless the host matches a configured domain entry
+        "strict_auth_domains": False,
     },
     "http": {
         "verify": True,
@@ -42,7 +44,7 @@ essential_keys = {
         "headers": {},
         "timeout": 10,
     },
-    # Per-domain overrides: { "api.example.com": { "headers": {"Authorization": "Bearer ..."} } }
+    # Per-domain overrides: { "api.example.com": { "headers": {"Authorization": "Bearer ..."}, "verify": true|false|path, "cert": path, "key": path, "proxy": url, "allow_auth": true|false } }
     "domains": {},
 }
 

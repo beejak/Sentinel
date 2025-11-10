@@ -18,22 +18,22 @@ Severity = str  # "low" | "medium" | "high"
 
 # Minimal rule metadata for SARIF enrichment
 RULE_META: Dict[str, Dict[str, Any]] = {
-    "PROBE-001": {"cwe": "CWE-287", "help": "docs/PROBES.md", "remediation": "Ensure protected resources validate bearer tokens server-side; reject invalid/expired tokens with 401/403."},  # Improper Authentication
-    "PROBE-002": {"cwe": "CWE-20",  "help": "docs/PROBES.md", "remediation": "Validate Content-Type and input; avoid processing JSON on GET; handle errors without 5xx."},  # Improper Input Validation
-    "PROBE-003": {"cwe": "CWE-770", "help": "docs/PROBES.md", "remediation": "Limit payload sizes and request body limits; return 413 or structured 4xx instead of 5xx."},  # Uncontrolled Resource Consumption
-    "PROBE-004": {"cwe": "CWE-942","help": "docs/PROBES.md", "remediation": "Avoid permissive CORS; restrict origins, methods and headers to minimal necessity."},  # Permissive CORS Policy
-    "PROBE-005": {"cwe": "CWE-22",  "help": "docs/PROBES.md", "remediation": "Enforce tool policies: sanitize file paths, allowlist roots, and return structured 403 on violations."},  # Path Traversal (policy)
-    "PROBE-006": {"cwe": "CWE-294", "help": "docs/PROBES.md", "remediation": "Make authorization codes single-use and time-limited; reject replays with invalid_grant."},  # Authentication Bypass by Replay
-    "PROBE-007": {"cwe": "CWE-307", "help": "docs/PROBES.md", "remediation": "Introduce request throttling for sensitive endpoints; return 429 with Retry-After."},  # Excessive Attempts / Rate Limit
-    "PROBE-008": {"cwe": "CWE-749","help": "docs/PROBES.md", "remediation": "Ensure /tool/run allows POST only; return 405 for disallowed methods; validate /tools behavior."},  # Exposed Dangerous Method
-    "PROBE-009": {"cwe": "CWE-436","help": "docs/PROBES.md", "remediation": "Validate Content-Type/body alignment; reject invalid JSON and mismatched types with structured 4xx."},  # Interpretation Conflict
-    "PROBE-010": {"cwe": "CWE-306","help": "docs/PROBES.md", "remediation": "Require Authorization header for /tool/run; return structured 401/403 for unauthenticated calls."},  # Missing Authentication
-    "PROBE-011": {"cwe": "CWE-200","help": "docs/PROBES.md", "remediation": "Disable HTTP TRACE on sensitive endpoints."},  # Information Exposure via TRACE
-    "PROBE-012": {"cwe": "CWE-345","help": "docs/PROBES.md", "remediation": "Reject POST without Content-Type; require application/json for JSON bodies."},  # Insufficient Verification of Data Authenticity
-    "PROBE-013": {"cwe": "CWE-770","help": "docs/PROBES.md", "remediation": "Cap header sizes; drop or reject oversized headers instead of 5xx."},  # Uncontrolled Resource Consumption
-    "PROBE-014": {"cwe": "CWE-918","help": "docs/PROBES.md", "remediation": "Block access to private addresses and metadata services; allowlist egress destinations."},  # SSRF
-    "PROBE-015": {"cwe": "CWE-693","help": "docs/PROBES.md", "remediation": "Set security headers (X-Content-Type-Options: nosniff, X-Frame-Options: DENY/SAMEORIGIN, CSP, Referrer-Policy)."},  # Protection Mechanism Failure (headers)
-    "PROBE-016": {"cwe": "CWE-1220","help": "docs/PROBES.md", "remediation": "Restrict tool surface; add read_file roots and fetch_url blocked CIDRs; avoid dangerous tool names (exec/shell)."}, # Insufficient Granularity of Access Control (policy)
+    "PROBE-001": {"cwe": "CWE-287", "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-001", "remediation": "Ensure protected resources validate bearer tokens server-side; reject invalid/expired tokens with 401/403."},  # Improper Authentication
+    "PROBE-002": {"cwe": "CWE-20",  "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-002", "remediation": "Validate Content-Type and input; avoid processing JSON on GET; handle errors without 5xx."},  # Improper Input Validation
+    "PROBE-003": {"cwe": "CWE-770", "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-003", "remediation": "Limit payload sizes and request body limits; return 413 or structured 4xx instead of 5xx."},  # Uncontrolled Resource Consumption
+    "PROBE-004": {"cwe": "CWE-942","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-004", "remediation": "Avoid permissive CORS; restrict origins, methods and headers to minimal necessity."},  # Permissive CORS Policy
+    "PROBE-005": {"cwe": "CWE-22",  "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-005", "remediation": "Enforce tool policies: sanitize file paths, allowlist roots, and return structured 403 on violations."},  # Path Traversal (policy)
+    "PROBE-006": {"cwe": "CWE-294", "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-006", "remediation": "Make authorization codes single-use and time-limited; reject replays with invalid_grant."},  # Authentication Bypass by Replay
+    "PROBE-007": {"cwe": "CWE-307", "help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-007", "remediation": "Introduce request throttling for sensitive endpoints; return 429 with Retry-After."},  # Excessive Attempts / Rate Limit
+    "PROBE-008": {"cwe": "CWE-749","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-008", "remediation": "Ensure /tool/run allows POST only; return 405 for disallowed methods; validate /tools behavior."},  # Exposed Dangerous Method
+    "PROBE-009": {"cwe": "CWE-436","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-009", "remediation": "Validate Content-Type/body alignment; reject invalid JSON and mismatched types with structured 4xx."},  # Interpretation Conflict
+    "PROBE-010": {"cwe": "CWE-306","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-010", "remediation": "Require Authorization header for /tool/run; return structured 401/403 for unauthenticated calls."},  # Missing Authentication
+    "PROBE-011": {"cwe": "CWE-200","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-011", "remediation": "Disable HTTP TRACE on sensitive endpoints."},  # Information Exposure via TRACE
+    "PROBE-012": {"cwe": "CWE-345","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-012", "remediation": "Reject POST without Content-Type; require application/json for JSON bodies."},  # Insufficient Verification of Data Authenticity
+    "PROBE-013": {"cwe": "CWE-770","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-013", "remediation": "Cap header sizes; drop or reject oversized headers instead of 5xx."},  # Uncontrolled Resource Consumption
+    "PROBE-014": {"cwe": "CWE-918","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-014", "remediation": "Block access to private addresses and metadata services; allowlist egress destinations."},  # SSRF
+    "PROBE-015": {"cwe": "CWE-693","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-015", "remediation": "Set security headers (X-Content-Type-Options: nosniff, X-Frame-Options: DENY/SAMEORIGIN, CSP, Referrer-Policy)."},  # Protection Mechanism Failure (headers)
+    "PROBE-016": {"cwe": "CWE-1220","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-016", "remediation": "Restrict tool surface; add read_file roots and fetch_url blocked CIDRs; avoid dangerous tool names (exec/shell)."}, # Insufficient Granularity of Access Control (policy)
 }
 
 

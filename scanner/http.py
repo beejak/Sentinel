@@ -30,14 +30,39 @@ def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     proxy = cfg.get("proxy")
     if proxy:
         kwargs.setdefault("proxies", {"http": proxy, "https": proxy})
-    # headers (global)
-    headers = _merge_headers(cfg.get("headers"), kwargs.get("headers"))
-    # domain-specific headers
+
+    # domain-specific overrides (verify/cert/key/proxy)
     try:
         host = urlparse(url).hostname or ""
     except Exception:
         host = ""
     domains = get_config().get("domains", {})
+    dom_cfg: Dict[str, Any] = {}
+    if isinstance(domains, dict) and host:
+        for k, v in domains.items():
+            if not isinstance(v, dict):
+                continue
+            if k == host or (k.startswith(".") and host.endswith(k)):
+                dom_cfg = v
+                break
+    # Apply domain overrides if present
+    if isinstance(dom_cfg, dict) and dom_cfg:
+        if dom_cfg.get("verify") is not None:
+            kwargs["verify"] = dom_cfg.get("verify")
+        dc = dom_cfg.get("cert")
+        dk = dom_cfg.get("key")
+        if dc and dk:
+            kwargs["cert"] = (dc, dk)
+        elif dc:
+            kwargs["cert"] = dc
+        dproxy = dom_cfg.get("proxy")
+        if dproxy:
+            kwargs["proxies"] = {"http": dproxy, "https": dproxy}
+
+    # headers (global)
+    headers = _merge_headers(cfg.get("headers"), kwargs.get("headers"))
+    # domain-specific headers
+    # host already parsed above; domains already loaded
     dom_headers: Dict[str, str] = {}
     if isinstance(domains, dict) and host:
         # Exact host match or suffix keys like ".example.com"
@@ -48,6 +73,11 @@ def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
                 dh = v.get("headers")
                 if isinstance(dh, dict):
                     dom_headers.update({str(n): str(val) for n, val in dh.items()})
+                allow_auth = bool(v.get("allow_auth"))
+                # Strict auth policy: remove Authorization header unless allowed by domain
+                strict = bool(get_config().get("policy", {}).get("strict_auth_domains", False))
+                if strict and "Authorization" in headers and not (allow_auth or (isinstance(dh, dict) and "Authorization" in dh)):
+                    headers.pop("Authorization", None)
     headers = _merge_headers(headers, dom_headers)
     if headers:
         kwargs["headers"] = headers

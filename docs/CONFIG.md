@@ -27,19 +27,27 @@ Keys
   - Safe defaults: User-Agent, Accept
   - Commented templates provided in sentinel.yml for Authorization, X-API-Key, Proxy-Authorization, X-Request-ID
 
-Per-domain headers
-- Configure host-specific headers without sending credentials to every host:
+Per-domain headers and overrides
+- Configure host-specific overrides without sending credentials to every host:
 ```
 domains:
   api.example.com:
     headers:
       Authorization: "Bearer <TOKEN>"
+    verify: true        # or false, or path to CA bundle
+    cert: /path/to/cert.pem
+    key: /path/to/key.pem
+    proxy: http://127.0.0.1:8080
+    allow_auth: true    # explicitly allow Authorization to this host under strict policy
   .internal.example.com:
     headers:
       X-Org: "security-scan"
 ```
 - A leading dot matches subdomains (e.g., .example.com)
-- Domain headers are merged after global headers and CLI/env headers.
+- Domain headers merge after global headers and CLI/env headers.
+
+Strict Authorization policy
+- Set `policy.strict_auth_domains: true` to strip Authorization unless the target host matches a configured domain entry with `headers.Authorization` or `allow_auth: true`.
 
 Environment variables
 
