@@ -16,6 +16,15 @@ A lightweight command-line tool to scan and report on MCP endpoints, schemas, an
 - Python 3.10+
 - Run: `python main.py --help`
 
+## Why Sentinel?
+- CI-friendly: JSON/SARIF output, non-zero exit on high severity
+- Practical probes: auth, guardrails, SSRF, rate limit, method/Content-Type matrix
+- Local harnesses included for repeatable testing
+
+```
+CLI -> Discovery (well-known + WWW-Authenticate) -> Probes (HTTP matrix, OAuth checks) -> Reports (JSON/SARIF/Markdown)
+```
+
 ### Windows one-liners (cmd)
 - Setup venv + deps: `scripts\setup.cmd`
 - Run CLI: `scripts\run_scanner.cmd --help`
@@ -51,8 +60,17 @@ Examples:
 
 ## Dev notes
 - Go test harness lives in `testharness/`; vulnerable server in `vuln-mcp/`.
-- CI runs Python smoke and Go builds on each push/PR (see `.github/workflows/ci.yml`).
+- CI runs lint/typecheck/tests and Go builds (see `.github/workflows/ci.yml`).
 - Release workflow builds Go binaries for Windows/Linux/macOS on tag push `v*` and publishes a GitHub Release.
+
+Docs:
+- Usage guide: `docs/USAGE.md`
+- Probe catalog: `docs/PROBES.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Roadmap: `docs/ROADMAP.md`
+- Lessons learned: `docs/LESSONS_LEARNED.md`
+- Research comparison: `docs/RESEARCH_COMPARISON.md`
+- Security test plan: `docs/SECURITY_TEST_PLAN.md`
 
 To cut a release:
 1. Tag: `git tag v0.1.0 && git push origin v0.1.0`

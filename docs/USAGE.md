@@ -10,9 +10,10 @@ Commands
 - Runtime probes (Milestone 3)
   - python main.py probe <base-url> [--profile baseline|intrusive] [--timeout 10] [--out findings.json] [--sarif findings.sarif] [--no-fail]
     - Baseline probes: PROBE-001 (Bogus token), PROBE-002 (Malformed GET), PROBE-004 (CORS preflight), PROBE-005 (Tool guardrails + structured error), PROBE-006 (Auth code replay), PROBE-007 (Rate limiting), PROBE-008 (Method matrix), PROBE-009 (Content-Type matrix), PROBE-010 (Invalid auth), PROBE-011 (TRACE method), PROBE-012 (Missing Content-Type), PROBE-014 (SSRF/egress)
-    - Intrusive adds: PROBE-003 (Oversize payload), PROBE-013 (Large header)
-- Legacy stub scan
-  - python main.py scan <base-url> [--json]
+- Intrusive adds: PROBE-003 (Oversize payload), PROBE-013 (Large header)
+- Other checks: PROBE-015 (Security headers)
+- Full scan (discover + probes)
+  - python main.py scan <base-url> [--profile baseline|intrusive] [--timeout 10] [--out scan.json] [--sarif findings.sarif] [--md report.md] [--no-fail]
 
 Defaults
 - Redirect callback port: 8765 (auth --redirect-port)
@@ -29,6 +30,24 @@ Auth flow notes
 
 Tips
 - Client must be registered with redirect URI http://127.0.0.1:<port>/callback.
+
+Logging
+- --log-level: DEBUG|INFO|WARNING|ERROR (default INFO)
+- --log-format: text (default) or json (JSON lines)
+
+Output formats
+- JSON: machine-readable results
+- SARIF: Static Analysis Results Interchange Format 2.1.0 (probes and scan)
+- Markdown: human-readable summary (scan)
+
+Examples
+- Discovery: `python main.py discover http://127.0.0.1:8085 -o docs/samples/discovery.json`
+- Probes: `python main.py probe http://127.0.0.1:8090 --profile baseline --out docs/samples/probe.json --sarif docs/samples/probe.sarif`
+- Full scan: `python main.py scan http://127.0.0.1:8085 --out docs/samples/scan.json --md docs/samples/scan.md`
+
+Exit codes
+- 0: success or only low/medium findings
+- 1: high-severity findings (unless --no-fail)
 - If the access_token is an opaque token, audience_ok may be null (unknown from client-side).
 - For non-interactive CI, you can run auth with a pre-authorized code via manual paste by opening the auth_url yourself and letting the local callback receive the code.
 

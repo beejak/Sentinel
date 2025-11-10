@@ -1,0 +1,9 @@
+{
+  "target": "http://127.0.0.1:8085",
+  "profile": "baseline",
+  "duration_ms": 123,
+  "findings": [
+    {"ruleId": "PROBE-001", "severity": "high", "title": "Resource accepted or redirected with bogus token", "evidence": {"status": 200}},
+    {"ruleId": "PROBE-015", "severity": "low", "title": "Missing common security headers", "evidence": {"missing": ["content-security-policy"]}}
+  ]
+}

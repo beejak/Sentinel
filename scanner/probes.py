@@ -540,6 +540,32 @@ class SSRFProbe(Probe):
         return findings
 
 
+class SecurityHeadersProbe(Probe):
+    id = "PROBE-015"
+    intrusive = False
+
+    def run(self, target: str, timeout: int) -> List[Dict[str, Any]]:
+        origin = _origin(target)
+        try:
+            r = requests.get(origin, timeout=timeout)
+            headers = {k.lower(): v for k, v in r.headers.items()}
+            missing = []
+            expected = [
+                "x-content-type-options",
+                "x-frame-options",
+                "content-security-policy",
+                "referrer-policy",
+            ]
+            for h in expected:
+                if h not in headers:
+                    missing.append(h)
+            if missing:
+                return [_result(self.id, "low", "Missing common security headers", {"missing": missing})]
+            return []
+        except requests.RequestException as e:
+            return [_result(self.id, "low", "Error checking security headers", {"error": str(e)})]
+
+
 class InvalidAuthProbe(Probe):
     id = "PROBE-010"
     intrusive = False
@@ -580,6 +606,7 @@ def run_probes(*, target: str, profile: str = "baseline", request_timeout: int =
         TraceMethodProbe(),
         MissingContentTypeProbe(),
         SSRFProbe(),
+        SecurityHeadersProbe(),
     ]
     if profile == "intrusive":
         probes.append(OversizePayloadProbe(size_kb=512))

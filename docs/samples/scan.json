@@ -1,0 +1,5 @@
+{
+  "target": "http://127.0.0.1:8085",
+  "discovery": {"oauth_summary": {"issuer": "http://127.0.0.1:8085"}},
+  "probes": {"findings": []}
+}
