@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from scanner.discovery import discover
@@ -8,6 +9,7 @@ from scanner.auth import run_auth_flow, run_auth_flow_dynamic
 from scanner.probes import run_probes
 
 logger = logging.getLogger(__name__)
+VERSION = "0.1.0"
 
 class JSONLogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
@@ -423,8 +425,8 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     oa = (result.get("discovery", {}).get("oauth_summary") or {})
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
-    # Build remediation guidance for unique rules present
-    try:
+    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
+    # Counts
         from scanner.probes import RULE_META as _RULE_META
     except Exception:
         _RULE_META = {}
@@ -455,8 +457,15 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
             num = cwe.split('-')[-1]
             return f"<a href='https://cwe.mitre.org/data/definitions/{num}.html' target='_blank'>{cwe}</a>"
         return ""
+    def _evidence_html(f):
+        try:
+            ev = f.get('evidence') or {}
+            import json as _json
+            return html.escape(_json.dumps(ev, indent=2)[:1000])
+        except Exception:
+            return ""
     rows = "\n".join(
-        f"<tr><td><a href='docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe_link(f)}</td></tr>"
+        f"<tr><td><a href='https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a><details><summary>details</summary><pre>{_evidence_html(f)}</pre></details></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe_link(f)}</td></tr>"
         for f in findings
     )
     return f"""
@@ -467,7 +476,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 </head>
 <body>
 <h1>Sentinel Scan Report</h1>
-<p><strong>Target:</strong> {target}</p>
+<p><strong>Target:</strong> {target} • <strong>Generated:</strong> {datetime.now(timezone.utc).isoformat()} • <strong>Version:</strong> {VERSION}</p>
 <p>
   <span class='badge sev-high'>High: {hi}</span>
   <span class='badge sev-medium'>Medium: {me}</span>

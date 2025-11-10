@@ -42,6 +42,7 @@ def _result(rule: str, severity: Severity, title: str, evidence: Dict[str, Any])
 
 
 def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    from datetime import datetime, timezone
     rules: Dict[str, Dict[str, Any]] = {}
     cwes: List[str] = []
     for f in findings:
@@ -66,25 +67,31 @@ def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     import hashlib
     for f in findings:
         level = {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning")
-        path = str(((f.get("evidence") or {}).get("path")) or "")
-        fp = hashlib.sha256(f"{f.get('ruleId')}|{path}".encode()).hexdigest()
+        ev = (f.get("evidence") or {})
+        path = str(ev.get("path") or "")
+        origin = str(ev.get("origin") or "")
+        fp = hashlib.sha256(f"{f.get('ruleId')}|{origin}|{path}".encode()).hexdigest()
         results.append({
             "ruleId": f.get("ruleId"),
             "level": level,
             "message": {"text": f.get("title")},
-            "locations": ([{"physicalLocation": {"artifactLocation": {"uri": path}}}] if path else None),
-            "partialFingerprints": {"ruleAndPath": fp},
+            "locations": ([{"physicalLocation": {"artifactLocation": {"uri": path or origin}}}] if (path or origin) else None),
+            "partialFingerprints": {"ruleOriginPath": fp},
             "properties": {"evidence": f.get("evidence")},
         })
+    now = datetime.now(timezone.utc).isoformat()
     return {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "runs": [
             {
-                "tool": {"driver": {"name": "mcp-scanner", "rules": list(rules.values())}},
+                "tool": {"driver": {"name": "mcp-scanner", "version": "0.1.0", "rules": list(rules.values())}},
                 "taxonomies": [
                     {"name": "CWE", "taxa": [{"id": c} for c in cwes]}
                 ] if cwes else [],
+                "invocations": [
+                    {"executionSuccessful": True, "startTimeUtc": now, "endTimeUtc": now}
+                ],
                 "results": results,
             }
         ],
@@ -800,6 +807,13 @@ def run_probes(*, target: str, profile: str = "baseline", request_timeout: int =
         if p.intrusive and profile != "intrusive":
             continue
         findings.extend(p.run(target, timeout=request_timeout, options={"enable_private_egress_checks": enable_private_egress_checks}))
+
+    # Annotate findings with origin for better fingerprints
+    for f in findings:
+        ev = f.get("evidence") or {}
+        if "origin" not in ev:
+            ev["origin"] = _origin(target)
+            f["evidence"] = ev
 
     out: Dict[str, Any] = {
         "target": target,

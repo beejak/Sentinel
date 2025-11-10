@@ -118,6 +118,7 @@ def repo_scan(*, path: Optional[str], repo: Optional[str], semgrep_docker: bool,
 
 
 def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
+    from datetime import datetime, timezone
     import hashlib
     findings = result.get("findings", [])
     rules: Dict[str, Dict[str, Any]] = {}
@@ -126,11 +127,21 @@ def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
         rid = f.get("ruleId")
         if rid and rid not in rules:
             level = {"low":"note","medium":"warning","high":"error"}.get(f.get("severity"),"warning")
+            # Attempt to set helpUri from evidence if present in semgrep metadata (not always available)
+            help_uri = None
+            ev = f.get("evidence") or {}
+            refs = ev.get("references") if isinstance(ev.get("references"), list) else []
+            if refs:
+                for ref in refs:
+                    if isinstance(ref, str) and ref.startswith("http"):
+                        help_uri = ref
+                        break
             rules[rid] = {
                 "id": rid,
                 "name": rid,
                 "shortDescription": {"text": f.get("title", rid)},
                 "defaultConfiguration": {"level": level},
+                "helpUri": help_uri,
             }
         cwe = (f.get("evidence") or {}).get("cwe")
         if cwe and cwe not in cwes:
@@ -147,12 +158,16 @@ def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
             "partialFingerprints": {"ruleAndPath": fp},
             "properties": {"evidence": f.get("evidence")},
         })
+    now = datetime.now(timezone.utc).isoformat()
     return {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "runs": [{
-            "tool": {"driver": {"name": "mcp-scanner/semgrep", "rules": list(rules.values())}},
+            "tool": {"driver": {"name": "mcp-scanner/semgrep", "version": "0.1.0", "rules": list(rules.values())}},
             "taxonomies": [{"name": "CWE", "taxa": [{"id": c} for c in cwes]}] if cwes else [],
+            "invocations": [
+                {"executionSuccessful": True, "startTimeUtc": now, "endTimeUtc": now}
+            ],
             "results": results
         }],
     }
@@ -166,8 +181,15 @@ def repo_scan_to_html(result: Dict[str, Any]) -> str:
     lo = sum(1 for f in fnds if f.get("severity") == "low")
     def _sev_cls(s: str) -> str:
         return {'high':'sev-high','medium':'sev-medium','low':'sev-low'}.get(s,'')
+    def _cwe(f):
+        ev = f.get('evidence') or {}
+        cwe = ev.get('cwe')
+        if isinstance(cwe, str) and cwe.startswith('CWE-'):
+            num = cwe.split('-')[-1]
+            return f"<a href='https://cwe.mitre.org/data/definitions/{num}.html' target='_blank'>{cwe}</a>"
+        return ''
     rows = "\n".join(
-        f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{html.escape(str((f.get('evidence') or {}).get('path') or ''))}</td></tr>"
+        f"<tr><td>{html.escape(f.get('ruleId',''))}</td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe(f)}</td><td>{html.escape(str((f.get('evidence') or {}).get('path') or ''))}</td></tr>"
         for f in fnds
     )
     return f"""
@@ -178,14 +200,14 @@ def repo_scan_to_html(result: Dict[str, Any]) -> str:
 </head>
 <body>
 <h1>Sentinel Repo Scan</h1>
-<p><strong>Path:</strong> {html.escape(str(result.get('path','')))}</p>
+<p><strong>Path:</strong> {html.escape(str(result.get('path','')))} • <strong>Generated:</strong> {datetime.now(timezone.utc).isoformat()} • <strong>Version:</strong> 0.1.0</p>
 <p>
   <span class='badge sev-high'>High: {hi}</span>
   <span class='badge sev-medium'>Medium: {me}</span>
   <span class='badge sev-low'>Low: {lo}</span>
 </p>
 <h2>Findings</h2>
-<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>Path</th></tr></thead>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>CWE</th><th>Path</th></tr></thead>
 <tbody>
 {rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
 </tbody></table>
