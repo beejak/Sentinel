@@ -423,6 +423,20 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     oa = (result.get("discovery", {}).get("oauth_summary") or {})
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
+    # Build remediation guidance for unique rules present
+    try:
+        from scanner.probes import RULE_META as _RULE_META
+    except Exception:
+        _RULE_META = {}
+    present_rules = []
+    seen = set()
+    for f in findings:
+        rid = f.get('ruleId')
+        if rid and rid not in seen:
+            seen.add(rid)
+            rem = ((_RULE_META.get(rid) or {}).get('remediation'))
+            if rem:
+                present_rules.append((rid, rem))
     sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
     # Counts
     hi = sum(1 for f in findings if (f.get('severity') == 'high'))
@@ -476,6 +490,10 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <tbody>
 {rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
 </tbody></table>
+<h2>Remediation Guidance</h2>
+<ul>
+{''.join(f"<li><strong>{html.escape(r)}</strong>: {html.escape(text)}</li>" for (r,text) in present_rules)}
+</ul>
 <p style='margin-top:1rem;color:#666'>Legend: <span class='sev-high'>High</span>, <span class='sev-medium'>Medium</span>, <span class='sev-low'>Low</span>. See <a href='docs/PROBES.md' target='_blank'>Probe Catalog</a> for details.</p>
 </body></html>
 """

@@ -14,3 +14,12 @@ http:
     # X-API-Key: "<KEY>"
     # Proxy-Authorization: "Basic <BASE64_USER_PASS>"
     # X-Request-ID: "<RUN_ID>"
+
+# Per-domain overrides (only sent when host matches). Examples:
+# domains:
+#   api.example.com:
+#     headers:
+#       Authorization: "Bearer <TOKEN>"
+#   .internal.example.com:
+#     headers:
+#       X-Org: "security-scan"

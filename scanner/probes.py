@@ -18,22 +18,22 @@ Severity = str  # "low" | "medium" | "high"
 
 # Minimal rule metadata for SARIF enrichment
 RULE_META: Dict[str, Dict[str, Any]] = {
-    "PROBE-001": {"cwe": "CWE-287", "help": "docs/PROBES.md"},  # Improper Authentication
-    "PROBE-002": {"cwe": "CWE-20",  "help": "docs/PROBES.md"},  # Improper Input Validation
-    "PROBE-003": {"cwe": "CWE-770", "help": "docs/PROBES.md"},  # Uncontrolled Resource Consumption
-    "PROBE-004": {"cwe": "CWE-942","help": "docs/PROBES.md"},  # Permissive CORS Policy
-    "PROBE-005": {"cwe": "CWE-22",  "help": "docs/PROBES.md"},  # Path Traversal (policy)
-    "PROBE-006": {"cwe": "CWE-294", "help": "docs/PROBES.md"},  # Authentication Bypass by Replay
-    "PROBE-007": {"cwe": "CWE-307", "help": "docs/PROBES.md"},  # Excessive Attempts / Rate Limit
-    "PROBE-008": {"cwe": "CWE-749","help": "docs/PROBES.md"},  # Exposed Dangerous Method
-    "PROBE-009": {"cwe": "CWE-436","help": "docs/PROBES.md"},  # Interpretation Conflict
-    "PROBE-010": {"cwe": "CWE-306","help": "docs/PROBES.md"},  # Missing Authentication
-    "PROBE-011": {"cwe": "CWE-200","help": "docs/PROBES.md"},  # Information Exposure via TRACE
-    "PROBE-012": {"cwe": "CWE-345","help": "docs/PROBES.md"},  # Insufficient Verification of Data Authenticity
-    "PROBE-013": {"cwe": "CWE-770","help": "docs/PROBES.md"},  # Uncontrolled Resource Consumption
-    "PROBE-014": {"cwe": "CWE-918","help": "docs/PROBES.md"},  # SSRF
-    "PROBE-015": {"cwe": "CWE-693","help": "docs/PROBES.md"},  # Protection Mechanism Failure (headers)
-    "PROBE-016": {"cwe": "CWE-1220","help": "docs/PROBES.md"}, # Insufficient Granularity of Access Control (policy)
+    "PROBE-001": {"cwe": "CWE-287", "help": "docs/PROBES.md", "remediation": "Ensure protected resources validate bearer tokens server-side; reject invalid/expired tokens with 401/403."},  # Improper Authentication
+    "PROBE-002": {"cwe": "CWE-20",  "help": "docs/PROBES.md", "remediation": "Validate Content-Type and input; avoid processing JSON on GET; handle errors without 5xx."},  # Improper Input Validation
+    "PROBE-003": {"cwe": "CWE-770", "help": "docs/PROBES.md", "remediation": "Limit payload sizes and request body limits; return 413 or structured 4xx instead of 5xx."},  # Uncontrolled Resource Consumption
+    "PROBE-004": {"cwe": "CWE-942","help": "docs/PROBES.md", "remediation": "Avoid permissive CORS; restrict origins, methods and headers to minimal necessity."},  # Permissive CORS Policy
+    "PROBE-005": {"cwe": "CWE-22",  "help": "docs/PROBES.md", "remediation": "Enforce tool policies: sanitize file paths, allowlist roots, and return structured 403 on violations."},  # Path Traversal (policy)
+    "PROBE-006": {"cwe": "CWE-294", "help": "docs/PROBES.md", "remediation": "Make authorization codes single-use and time-limited; reject replays with invalid_grant."},  # Authentication Bypass by Replay
+    "PROBE-007": {"cwe": "CWE-307", "help": "docs/PROBES.md", "remediation": "Introduce request throttling for sensitive endpoints; return 429 with Retry-After."},  # Excessive Attempts / Rate Limit
+    "PROBE-008": {"cwe": "CWE-749","help": "docs/PROBES.md", "remediation": "Ensure /tool/run allows POST only; return 405 for disallowed methods; validate /tools behavior."},  # Exposed Dangerous Method
+    "PROBE-009": {"cwe": "CWE-436","help": "docs/PROBES.md", "remediation": "Validate Content-Type/body alignment; reject invalid JSON and mismatched types with structured 4xx."},  # Interpretation Conflict
+    "PROBE-010": {"cwe": "CWE-306","help": "docs/PROBES.md", "remediation": "Require Authorization header for /tool/run; return structured 401/403 for unauthenticated calls."},  # Missing Authentication
+    "PROBE-011": {"cwe": "CWE-200","help": "docs/PROBES.md", "remediation": "Disable HTTP TRACE on sensitive endpoints."},  # Information Exposure via TRACE
+    "PROBE-012": {"cwe": "CWE-345","help": "docs/PROBES.md", "remediation": "Reject POST without Content-Type; require application/json for JSON bodies."},  # Insufficient Verification of Data Authenticity
+    "PROBE-013": {"cwe": "CWE-770","help": "docs/PROBES.md", "remediation": "Cap header sizes; drop or reject oversized headers instead of 5xx."},  # Uncontrolled Resource Consumption
+    "PROBE-014": {"cwe": "CWE-918","help": "docs/PROBES.md", "remediation": "Block access to private addresses and metadata services; allowlist egress destinations."},  # SSRF
+    "PROBE-015": {"cwe": "CWE-693","help": "docs/PROBES.md", "remediation": "Set security headers (X-Content-Type-Options: nosniff, X-Frame-Options: DENY/SAMEORIGIN, CSP, Referrer-Policy)."},  # Protection Mechanism Failure (headers)
+    "PROBE-016": {"cwe": "CWE-1220","help": "docs/PROBES.md", "remediation": "Restrict tool surface; add read_file roots and fetch_url blocked CIDRs; avoid dangerous tool names (exec/shell)."}, # Insufficient Granularity of Access Control (policy)
 }
 
 
@@ -49,12 +49,14 @@ def _sarif(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
         if rid and rid not in rules:
             meta = RULE_META.get(rid, {})
             level = {"low": "note", "medium": "warning", "high": "error"}.get(f.get("severity"), "warning")
+            rem = meta.get("remediation")
             rules[rid] = {
                 "id": rid,
                 "name": rid,
                 "shortDescription": {"text": f.get("title", rid)},
                 "fullDescription": {"text": f.get("title", rid)},
                 "helpUri": meta.get("help"),
+                "help": ({"text": rem, "markdown": rem} if rem else None),
                 "properties": {"cwe": meta.get("cwe")},
                 "defaultConfiguration": {"level": level},
             }
@@ -558,6 +560,7 @@ class SSRFProbe(Probe):
         # Attempt loopback SSRF to harness
         ssrf_targets = [
             "http://127.0.0.1:8085/",
+            "http://169.254.169.254/",
         ]
         for url in ssrf_targets:
             payload = {"tool": "fetch_url", "args": {"url": url}}
@@ -582,6 +585,96 @@ class SSRFProbe(Probe):
                     findings.append(_result(self.id, "medium", "5xx on SSRF block", {"status": r.status_code}))
             except requests.RequestException as e:
                 findings.append(_result(self.id, "low", "Error during SSRF probe", {"error": str(e), "target": url}))
+        return findings
+
+
+class NoneAlgTokenProbe(Probe):
+    id = "PROBE-017"
+    intrusive = False
+
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        origin = _origin(target)
+        # Build unsigned JWT (alg=none)
+        try:
+            header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').decode().rstrip('=')
+            payload = base64.urlsafe_b64encode(b'{"sub":"test"}').decode().rstrip('=')
+            token = f"{header}.{payload}."
+            r = http.get(origin, headers={"Authorization": f"Bearer {token}"}, timeout=timeout, allow_redirects=False)
+            if r.status_code in (200, 302, 303):
+                return [_result(self.id, "high", "Resource accepted unsigned JWT (alg=none)", {"status": r.status_code})]
+            return []
+        except requests.RequestException as e:
+            return [_result(self.id, "low", "Error sending unsigned JWT", {"error": str(e)})]
+
+
+class JWKSKeyStrengthProbe(Probe):
+    id = "PROBE-018"
+    intrusive = False
+
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        # Fetch jwks_uri from discovery and validate key sizes
+        meta = discover(target)
+        oa = meta.get("oauth_summary", {}) if isinstance(meta, dict) else {}
+        jwks = oa.get("jwks_uri")
+        if not jwks:
+            return [_result(self.id, "low", "No jwks_uri in discovery", {})]
+        findings: List[Dict[str, Any]] = []
+        try:
+            r = http.get(jwks, timeout=timeout)
+            j = r.json()
+        except Exception as e:
+            return [_result(self.id, "low", "Unable to fetch/parse JWKS", {"error": str(e)})]
+        keys = (j or {}).get("keys") or []
+        for k in keys:
+            kty = k.get("kty")
+            if kty == "RSA":
+                n_b64 = k.get("n")
+                if not n_b64:
+                    continue
+                try:
+                    import base64
+                    nb = base64.urlsafe_b64decode(n_b64 + "==")
+                    bits = len(nb) * 8
+                    if bits < 2048:
+                        findings.append(_result(self.id, "high", "RSA key size too small", {"kid": k.get("kid"), "bits": bits}))
+                except Exception:
+                    pass
+            # EC checks could be added later (curve validation)
+        return findings
+
+
+class HSTSAndTLSProbe(Probe):
+    id = "PROBE-019"
+    intrusive = False
+
+    def run(self, target: str, timeout: int, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        origin = _origin(target)
+        findings: List[Dict[str, Any]] = []
+        # HSTS check
+        try:
+            r = http.get(origin, timeout=timeout)
+            if origin.lower().startswith("https"):
+                hsts = r.headers.get("Strict-Transport-Security")
+                if not hsts:
+                    findings.append(_result(self.id, "low", "Missing HSTS header on HTTPS origin", {}))
+        except requests.RequestException as e:
+            findings.append(_result(self.id, "low", "Error probing HSTS", {"error": str(e)}))
+        # TLS version check (best effort)
+        try:
+            from urllib.parse import urlparse
+            import socket, ssl
+            u = urlparse(origin)
+            host = u.hostname
+            port = u.port or 443
+            if u.scheme == "https" and host:
+                ctx = ssl.create_default_context()
+                with socket.create_connection((host, port), timeout=timeout) as sock:
+                    with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                        ver = getattr(ssock, "version", lambda: "unknown")()
+                        if ver in ("TLSv1", "TLSv1.1"):
+                            findings.append(_result(self.id, "medium", "TLS version is outdated", {"version": ver}))
+        except Exception:
+            pass
         return findings
 
 
@@ -694,6 +787,9 @@ def run_probes(*, target: str, profile: str = "baseline", request_timeout: int =
         SSRFProbe(),
         SecurityHeadersProbe(),
         ToolSchemaValidationProbe(),
+        NoneAlgTokenProbe(),
+        JWKSKeyStrengthProbe(),
+        HSTSAndTLSProbe(),
     ]
     if profile == "intrusive":
         probes.append(OversizePayloadProbe(size_kb=512))

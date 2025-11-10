@@ -27,6 +27,20 @@ Keys
   - Safe defaults: User-Agent, Accept
   - Commented templates provided in sentinel.yml for Authorization, X-API-Key, Proxy-Authorization, X-Request-ID
 
+Per-domain headers
+- Configure host-specific headers without sending credentials to every host:
+```
+domains:
+  api.example.com:
+    headers:
+      Authorization: "Bearer <TOKEN>"
+  .internal.example.com:
+    headers:
+      X-Org: "security-scan"
+```
+- A leading dot matches subdomains (e.g., .example.com)
+- Domain headers are merged after global headers and CLI/env headers.
+
 Environment variables
 
 Common header templates (enable one of these in sentinel.yml or via CLI/env)

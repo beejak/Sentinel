@@ -42,6 +42,8 @@ essential_keys = {
         "headers": {},
         "timeout": 10,
     },
+    # Per-domain overrides: { "api.example.com": { "headers": {"Authorization": "Bearer ..."} } }
+    "domains": {},
 }
 
 

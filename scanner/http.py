@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 import requests
 from .config import get_config
 
@@ -13,7 +14,7 @@ def _merge_headers(h1: Optional[Dict[str, str]], h2: Optional[Dict[str, str]]) -
     return out
 
 
-def _apply_http_options(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     cfg = get_config().get("http", {})
     # verify may be bool or path
     if cfg.get("verify") is not None:
@@ -29,8 +30,25 @@ def _apply_http_options(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     proxy = cfg.get("proxy")
     if proxy:
         kwargs.setdefault("proxies", {"http": proxy, "https": proxy})
-    # headers
+    # headers (global)
     headers = _merge_headers(cfg.get("headers"), kwargs.get("headers"))
+    # domain-specific headers
+    try:
+        host = urlparse(url).hostname or ""
+    except Exception:
+        host = ""
+    domains = get_config().get("domains", {})
+    dom_headers: Dict[str, str] = {}
+    if isinstance(domains, dict) and host:
+        # Exact host match or suffix keys like ".example.com"
+        for k, v in domains.items():
+            if not isinstance(v, dict):
+                continue
+            if k == host or (k.startswith(".") and host.endswith(k)):
+                dh = v.get("headers")
+                if isinstance(dh, dict):
+                    dom_headers.update({str(n): str(val) for n, val in dh.items()})
+    headers = _merge_headers(headers, dom_headers)
     if headers:
         kwargs["headers"] = headers
     # timeout default
@@ -39,7 +57,7 @@ def _apply_http_options(kwargs: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def request(method: str, url: str, **kwargs: Any) -> requests.Response:
-    return requests.request(method, url, **_apply_http_options(kwargs))
+    return requests.request(method, url, **_apply_http_options(url, kwargs))
 
 
 def get(url: str, **kwargs: Any) -> requests.Response:
