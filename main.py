@@ -79,6 +79,7 @@ def main() -> None:
     p_probe = subparsers.add_parser("probe", parents=[common], help="Run runtime probes against target")
     p_probe.add_argument("--baseline-in", help="Path to baseline fingerprints to suppress pre-existing findings")
     p_probe.add_argument("--baseline-out", help="Write current fingerprints to file (establish new baseline)")
+    p_probe.add_argument("--fail-on", choices=["none", "low", "medium", "high"], default="high", help="Exit non-zero if findings at or above this severity are present (default: high)")
 
     # repo-scan subcommand (static analysis placeholder)
     p_repo = subparsers.add_parser("repo-scan", parents=[common], help="Scan a repository path or URL (static analysis)")
@@ -96,7 +97,7 @@ def main() -> None:
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
     p_probe.add_argument("--out", help="Write findings JSON to file")
     p_probe.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
-    p_probe.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
+    p_probe.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings (overrides --fail-on)")
 
     # scan subcommand (aggregated discover + probes)
     p_scan = subparsers.add_parser("scan", parents=[common], help="Run full scan (discover + probes)")
@@ -108,7 +109,8 @@ def main() -> None:
     p_scan.add_argument("--md", help="Write Markdown report to file")
     p_scan.add_argument("--html", help="Write HTML report to file")
     p_scan.add_argument("--json", action="store_true", help="Print JSON to stdout (default view)")
-    p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
+    p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings (overrides --fail-on)")
+    p_scan.add_argument("--fail-on", choices=["none", "low", "medium", "high"], default="high", help="Exit non-zero if findings at or above this severity are present (default: high)")
     p_scan.add_argument("--baseline-in", help="Path to baseline fingerprints")
     p_scan.add_argument("--baseline-out", help="Write current fingerprints to file")
 
@@ -156,6 +158,15 @@ def main() -> None:
     set_config(cfg)
 
     # Baseline helpers
+    def _sev_order(s: str) -> int:
+        return {"low": 1, "medium": 2, "high": 3}.get(str(s).lower(), 0)
+
+    def _fail_threshold_reached(findings: list[dict], threshold: str) -> bool:
+        if threshold == "none":
+            return False
+        t = _sev_order(threshold)
+        return any(_sev_order(f.get("severity", "")) >= t for f in findings)
+
     def _fp(f: Dict[str, Any]) -> str:
         import hashlib
         path = str(((f.get("evidence") or {}).get("path")) or "")
@@ -291,9 +302,9 @@ def main() -> None:
         # Print summary if no out
         if not getattr(args, "out", None):
             print(json.dumps(result, indent=2))
-        # Exit non-zero on high severity unless --no-fail
-        has_high = any((f.get("severity") == "high") for f in result.get("findings", []))
-        if has_high and not getattr(args, "no_fail", False):
+        # Exit condition
+        threshold = getattr(args, "fail_on", "high")
+        if not getattr(args, "no_fail", False) and _fail_threshold_reached(result.get("findings", []), threshold):
             raise SystemExit(1)
         return
 
@@ -343,9 +354,9 @@ def main() -> None:
     # Print JSON unless suppressed
     if getattr(args, "json", True):
         print(json.dumps(result, indent=2))
-    # Exit on high findings unless --no-fail
-    has_high = any((f.get("severity") == "high") for f in probes.get("findings", []))
-    if has_high and not getattr(args, "no_fail", False):
+    # Exit condition
+    threshold = getattr(args, "fail_on", "high")
+    if not getattr(args, "no_fail", False) and _fail_threshold_reached(probes.get("findings", []), threshold):
         raise SystemExit(1)
 
 
