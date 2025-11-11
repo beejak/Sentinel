@@ -437,7 +437,8 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
     sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
-    # Counts
+    # Remediation list for present rules
+    try:
         from scanner.probes import RULE_META as _RULE_META
     except Exception:
         _RULE_META = {}
@@ -450,7 +451,6 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
             rem = ((_RULE_META.get(rid) or {}).get('remediation'))
             if rem:
                 present_rules.append((rid, rem))
-    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
     # Counts
     hi = sum(1 for f in findings if (f.get('severity') == 'high'))
     me = sum(1 for f in findings if (f.get('severity') == 'medium'))

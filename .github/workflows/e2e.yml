@@ -48,7 +48,7 @@ jobs:
           name: e2e-insecure-artifacts
           path: |
             e2e-scan.json
-            e2e-sarif.sarif
+            e2e-scan.sarif
             e2e-scan.html
             vuln-mcp.log
       - name: Enforce expected failure on high
