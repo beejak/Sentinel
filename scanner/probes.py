@@ -34,6 +34,9 @@ RULE_META: Dict[str, Dict[str, Any]] = {
     "PROBE-014": {"cwe": "CWE-918","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-014", "remediation": "Block access to private addresses and metadata services; allowlist egress destinations."},  # SSRF
     "PROBE-015": {"cwe": "CWE-693","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-015", "remediation": "Set security headers (X-Content-Type-Options: nosniff, X-Frame-Options: DENY/SAMEORIGIN, CSP, Referrer-Policy)."},  # Protection Mechanism Failure (headers)
     "PROBE-016": {"cwe": "CWE-1220","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-016", "remediation": "Restrict tool surface; add read_file roots and fetch_url blocked CIDRs; avoid dangerous tool names (exec/shell)."}, # Insufficient Granularity of Access Control (policy)
+    "PROBE-017": {"cwe": "CWE-347","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-017", "remediation": "Do not accept unsigned JWTs; reject alg=none; require signature verification for all tokens."}, # Improper Verification of Cryptographic Signature
+    "PROBE-018": {"cwe": "CWE-326","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-018", "remediation": "Use RSA >= 2048 bits and approved EC curves (P-256/384/521). Ensure alg/kty/crv are consistent."}, # Inadequate Encryption Strength
+    "PROBE-019": {"cwe": "CWE-523","help": "https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md#probe-019", "remediation": "Enable HSTS on HTTPS origins and disable legacy TLS versions (TLS 1.0/1.1)."}, # Unprotected Transport of Credentials
 }
 
 
@@ -634,6 +637,7 @@ class JWKSKeyStrengthProbe(Probe):
         keys = (j or {}).get("keys") or []
         for k in keys:
             kty = k.get("kty")
+            alg = (k.get("alg") or "").upper()
             if kty == "RSA":
                 n_b64 = k.get("n")
                 if not n_b64:
@@ -644,9 +648,23 @@ class JWKSKeyStrengthProbe(Probe):
                     bits = len(nb) * 8
                     if bits < 2048:
                         findings.append(_result(self.id, "high", "RSA key size too small", {"kid": k.get("kid"), "bits": bits}))
+                    if alg.startswith("ES"):
+                        findings.append(_result(self.id, "medium", "alg/kty mismatch: RSA key with ES* algorithm", {"kid": k.get("kid"), "alg": alg, "kty": kty}))
                 except Exception:
                     pass
-            # EC checks could be added later (curve validation)
+            elif kty == "EC":
+                crv = (k.get("crv") or "").upper()
+                allowed = {"P-256", "P-384", "P-521"}
+                if crv not in allowed:
+                    findings.append(_result(self.id, "high", "Unsupported or weak EC curve", {"kid": k.get("kid"), "crv": k.get("crv")}))
+                # alg alignment
+                expected = {"P-256": "ES256", "P-384": "ES384", "P-521": "ES512"}.get(crv)
+                if alg and expected and alg != expected:
+                    findings.append(_result(self.id, "medium", "alg/crv mismatch for EC key", {"kid": k.get("kid"), "alg": alg, "crv": k.get("crv")}))
+                if alg.startswith("RS"):
+                    findings.append(_result(self.id, "medium", "alg/kty mismatch: EC key with RS* algorithm", {"kid": k.get("kid"), "alg": alg, "kty": kty}))
+                if alg == "NONE":
+                    findings.append(_result(self.id, "high", "JWKS advertises alg=none (invalid)", {"kid": k.get("kid")}))
         return findings
 
 

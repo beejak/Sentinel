@@ -39,15 +39,22 @@ domains:
     key: /path/to/key.pem
     proxy: http://127.0.0.1:8080
     allow_auth: true    # explicitly allow Authorization to this host under strict policy
+    headers_merge: merge_prefer_domain  # replace | merge_prefer_domain | merge_prefer_global | append | prepend
+    timeouts:
+      connect: 5   # seconds
+      read: 30     # seconds
   .internal.example.com:
     headers:
       X-Org: "security-scan"
 ```
 - A leading dot matches subdomains (e.g., .example.com)
 - Domain headers merge after global headers and CLI/env headers.
+- Per-host timeouts: if set, requests use (connect, read). Global `http.timeout` remains the default.
+- Global strategy: `http.headers_merge` controls the default merge behavior.
 
 Strict Authorization policy
 - Set `policy.strict_auth_domains: true` to strip Authorization unless the target host matches a configured domain entry with `headers.Authorization` or `allow_auth: true`.
+- Env override: `SENTINEL_STRICT_AUTH_DOMAINS=true|false`.
 
 Environment variables
 
@@ -70,4 +77,5 @@ Environment variables
 - SENTINEL_HTTP_KEY=/path/to/key.pem
 - SENTINEL_HTTP_PROXY=http://127.0.0.1:8080
 - SENTINEL_HTTP_TIMEOUT=15
+- SENTINEL_HTTP_HEADERS_MERGE=merge_prefer_domain|replace|merge_prefer_global|append|prepend
 - SENTINEL_HTTP_HEADER_AUTHORIZATION="Bearer X..." (any header as SENTINEL_HTTP_HEADER_*)

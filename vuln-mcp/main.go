@@ -63,6 +63,12 @@ var (
     acceptBogusToken    = envBool("VULN_ACCEPT_BOGUS_TOKEN", true)
     ssrfBlock           = envBool("VULN_SSRF_BLOCK", false) // default: vulnerable (no block)
 
+    // New vuln flags
+    acceptAlgNone       = envBool("VULN_ACCEPT_ALG_NONE", true)
+    weakRSA             = envBool("VULN_WEAK_RSA_KEY", false)
+    noHSTS              = envBool("VULN_NO_HSTS", true)
+    dangerousTool       = envBool("VULN_DANGEROUS_TOOL", true)
+
     issuer = "http://127.0.0.1:8090"
 
     muClients sync.Mutex
@@ -106,6 +112,7 @@ func handleJWKS(w http.ResponseWriter, r *http.Request) {
     jwk := map[string]any{"kty": "RSA", "use": "sig", "alg": "RS256", "kid": keyKid, "n": n, "e": e}
     jwks := map[string]any{"keys": []any{jwk}}
     w.Header().Set("Content-Type", "application/json")
+    if !noHSTS { w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains") }
     _ = json.NewEncoder(w).Encode(jwks)
 }
 
@@ -197,12 +204,17 @@ func pathAllowed(p string) bool {
 }
 
 func handleTools(w http.ResponseWriter, r *http.Request) {
+    tools := []any{
+        map[string]any{"name": "read_file", "description": "Reads files"},
+        map[string]any{"name": "fetch_url", "description": "Fetches a URL (vulnerable by default)"},
+    }
+    if dangerousTool {
+        tools = append(tools, map[string]any{"name": "exec", "description": "Executes system commands (dangerous)"})
+    }
     w.Header().Set("Content-Type", "application/json")
+    if !noHSTS { w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains") }
     _ = json.NewEncoder(w).Encode(map[string]any{
-        "tools": []any{
-            map[string]any{"name": "read_file", "description": "Reads files"},
-            map[string]any{"name": "fetch_url", "description": "Fetches a URL (vulnerable by default)"},
-        },
+        "tools": tools,
         "policy": map[string]any{
             "read_file": map[string]any{"roots": []string{"/tmp/", "C\\tmp\\"}},
             "fetch_url": map[string]any{"note": "SSRF blocking disabled by default; set VULN_SSRF_BLOCK=true to enable basic checks"},
@@ -226,8 +238,21 @@ func handleToolRun(w http.ResponseWriter, r *http.Request) {
     if !acceptBogusToken {
         if !strings.HasPrefix(auth, "Bearer ") { w.WriteHeader(http.StatusUnauthorized); _ = json.NewEncoder(w).Encode(map[string]any{"error":"unauthorized"}); return }
         tok := strings.TrimPrefix(auth, "Bearer ")
+        // Accept alg=none if enabled
+        if acceptAlgNone && strings.HasSuffix(tok, ".") {
+            parts := strings.Split(tok, ".")
+            if len(parts) == 3 && parts[2] == "" {
+                // header check alg=none
+                hb, _ := base64.RawURLEncoding.DecodeString(parts[0])
+                var hdr map[string]any; _ = json.Unmarshal(hb, &hdr)
+                if v, ok := hdr["alg"].(string); ok && strings.EqualFold(v, "none") {
+                    goto AUTH_OK
+                }
+            }
+        }
         if _, err := verifyJWTRS256(tok, pubKey); err != nil { w.WriteHeader(http.StatusUnauthorized); _ = json.NewEncoder(w).Encode(map[string]any{"error":"unauthorized"}); return }
     }
+AUTH_OK:
 
     // Content-Type enforcement
     ct := r.Header.Get("Content-Type")
@@ -280,17 +305,28 @@ func handleToolRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
+    if !noHSTS { w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains") }
     if acceptBogusToken { _ = json.NewEncoder(w).Encode(map[string]any{"ok": true}); return }
     auth := r.Header.Get("Authorization")
     if !strings.HasPrefix(auth, "Bearer ") { w.WriteHeader(http.StatusUnauthorized); return }
     tok := strings.TrimPrefix(auth, "Bearer ")
+    if acceptAlgNone && strings.HasSuffix(tok, ".") {
+        parts := strings.Split(tok, ".")
+        if len(parts) == 3 && parts[2] == "" {
+            hb, _ := base64.RawURLEncoding.DecodeString(parts[0])
+            var hdr map[string]any; _ = json.Unmarshal(hb, &hdr)
+            if v, ok := hdr["alg"].(string); ok && strings.EqualFold(v, "none") { _ = json.NewEncoder(w).Encode(map[string]any{"ok": true}); return }
+        }
+    }
     if _, err := verifyJWTRS256(tok, pubKey); err != nil { w.WriteHeader(http.StatusUnauthorized); return }
     _ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
 
 func main() {
     // Generate key
-    k, err := rsa.GenerateKey(rand.Reader, 2048)
+    bits := 2048
+    if weakRSA { bits = 1024 }
+    k, err := rsa.GenerateKey(rand.Reader, bits)
     if err != nil { log.Fatal(err) }
     privKey, pubKey, keyKid = k, &k.PublicKey, b64url([]byte("kid"+time.Now().Format(time.RFC3339)))
 
@@ -307,6 +343,6 @@ func main() {
 
     addr := ":8090"
     log.Printf("VULN MCP listening on %s (issuer %s)", addr, issuer)
-    log.Printf("Vulnerabilities: GET/PUT=%v TRACE=%v missingCT=%v traversal=%v permissive=%v replay=%v bogusToken=%v", allowGETPUT, allowTRACE, acceptMissingCT, allowTraversalPaths, permissiveToolRun, replayCodes, acceptBogusToken)
+    log.Printf("Vulnerabilities: GET/PUT=%v TRACE=%v missingCT=%v traversal=%v permissive=%v replay=%v bogusToken=%v algNone=%v weakRSA=%v noHSTS=%v dangerousTool=%v", allowGETPUT, allowTRACE, acceptMissingCT, allowTraversalPaths, permissiveToolRun, replayCodes, acceptBogusToken, acceptAlgNone, weakRSA, noHSTS, dangerousTool)
     log.Fatal(http.ListenAndServe(addr, mux))
 }

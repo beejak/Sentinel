@@ -43,8 +43,11 @@ essential_keys = {
         "proxy": None,
         "headers": {},
         "timeout": 10,
+        # How to merge global headers with per-domain headers.
+        # one of: replace | merge_prefer_domain | merge_prefer_global | append | prepend
+        "headers_merge": "merge_prefer_domain",
     },
-    # Per-domain overrides: { "api.example.com": { "headers": {"Authorization": "Bearer ..."}, "verify": true|false|path, "cert": path, "key": path, "proxy": url, "allow_auth": true|false } }
+    # Per-domain overrides: { "api.example.com": { "headers": {"Authorization": "Bearer ..."}, "verify": true|false|path, "cert": path, "key": path, "proxy": url, "allow_auth": true|false, "headers_merge": "merge_prefer_domain", "timeouts": {"connect": 5, "read": 30, "total": 60} } }
     "domains": {},
 }
 
@@ -80,6 +83,7 @@ def load_config(path: Optional[str]) -> Dict[str, Any]:
         "offline": _str_to_bool_or_path(os.environ.get("SENTINEL_OFFLINE", str(cfg["offline"]))),
         "policy": {
             "enable_private_egress_checks": _str_to_bool_or_path(os.environ.get("SENTINEL_ENABLE_PRIVATE_EGRESS_CHECKS", str(cfg["policy"]["enable_private_egress_checks"]))),
+            "strict_auth_domains": _str_to_bool_or_path(os.environ.get("SENTINEL_STRICT_AUTH_DOMAINS", str(cfg["policy"]["strict_auth_domains"]))),
         },
         "http": {
             "verify": _str_to_bool_or_path(os.environ.get("SENTINEL_HTTP_VERIFY", str(cfg["http"]["verify"]))),
@@ -88,6 +92,7 @@ def load_config(path: Optional[str]) -> Dict[str, Any]:
             "proxy": os.environ.get("SENTINEL_HTTP_PROXY", cfg["http"]["proxy"] or "") or None,
             "timeout": int(os.environ.get("SENTINEL_HTTP_TIMEOUT", cfg["http"]["timeout"])),
             "headers": _merge(cfg["http"].get("headers", {}), env_http_headers),
+            "headers_merge": os.environ.get("SENTINEL_HTTP_HEADERS_MERGE", cfg["http"].get("headers_merge", "merge_prefer_domain")),
         },
     }
     cfg = _merge(cfg, env_cfg)

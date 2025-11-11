@@ -14,6 +14,30 @@ def _merge_headers(h1: Optional[Dict[str, str]], h2: Optional[Dict[str, str]]) -
     return out
 
 
+def _merge_with_strategy(base: Dict[str, str], dom: Dict[str, str], strategy: str) -> Dict[str, str]:
+    strategy = (strategy or "merge_prefer_domain").lower()
+    if strategy == "replace":
+        return dict(dom)
+    if strategy == "merge_prefer_global":
+        out = dict(dom)
+        out.update(base)
+        return out
+    if strategy == "append" or strategy == "prepend":
+        out = dict(base)
+        for k, v in dom.items():
+            if k in out:
+                if strategy == "append":
+                    out[k] = f"{out[k]}, {v}"
+                else:
+                    out[k] = f"{v}, {out[k]}"
+            else:
+                out[k] = v
+        return out
+    # default merge_prefer_domainn    out = dict(base)
+    out.update(dom)
+    return out
+
+
 def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     cfg = get_config().get("http", {})
     # verify may be bool or path
@@ -61,9 +85,12 @@ def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
 
     # headers (global)
     headers = _merge_headers(cfg.get("headers"), kwargs.get("headers"))
-    # domain-specific headers
+    # domain-specific headers and policy
     # host already parsed above; domains already loaded
     dom_headers: Dict[str, str] = {}
+    headers_merge_strategy = str(cfg.get("headers_merge", "merge_prefer_domain"))
+    allow_auth = False
+    dom_timeouts: Optional[Dict[str, int]] = None
     if isinstance(domains, dict) and host:
         # Exact host match or suffix keys like ".example.com"
         for k, v in domains.items():
@@ -74,15 +101,27 @@ def _apply_http_options(url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
                 if isinstance(dh, dict):
                     dom_headers.update({str(n): str(val) for n, val in dh.items()})
                 allow_auth = bool(v.get("allow_auth"))
-                # Strict auth policy: remove Authorization header unless allowed by domain
-                strict = bool(get_config().get("policy", {}).get("strict_auth_domains", False))
-                if strict and "Authorization" in headers and not (allow_auth or (isinstance(dh, dict) and "Authorization" in dh)):
-                    headers.pop("Authorization", None)
-    headers = _merge_headers(headers, dom_headers)
+                headers_merge_strategy = str(v.get("headers_merge", headers_merge_strategy))
+                if isinstance(v.get("timeouts"), dict):
+                    dom_timeouts = {"connect": int(v["timeouts"].get("connect", 0) or 0), "read": int(v["timeouts"].get("read", 0) or 0)}
+                break
+    # Strict auth policy: remove Authorization header unless allowed by domain or explicitly set in domain headers
+    strict = bool(get_config().get("policy", {}).get("strict_auth_domains", False))
+    if strict and "Authorization" in headers and not (allow_auth or ("Authorization" in dom_headers)):
+        headers.pop("Authorization", None)
+
+    # Apply merge strategy between global/request headers and domain headers
+    headers = _merge_with_strategy(headers, dom_headers, headers_merge_strategy)
     if headers:
         kwargs["headers"] = headers
-    # timeout default
-    kwargs.setdefault("timeout", cfg.get("timeout", 10))
+
+    # timeout default (support per-domain connect/read overrides)
+    if dom_timeouts and (dom_timeouts.get("connect") or dom_timeouts.get("read")):
+        conn = dom_timeouts.get("connect") or cfg.get("timeout", 10)
+        rd = dom_timeouts.get("read") or cfg.get("timeout", 10)
+        kwargs.setdefault("timeout", (conn, rd))
+    else:
+        kwargs.setdefault("timeout", cfg.get("timeout", 10))
     return kwargs
 
 

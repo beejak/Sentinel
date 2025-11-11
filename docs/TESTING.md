@@ -26,6 +26,16 @@ Vulnerable MCP server (vuln-mcp/)
   - `go build -o vuln-mcp.exe ./vuln-mcp`
 - Run (defaults to vulnerable):
   - `./vuln-mcp.exe`
+- Quick start (fully-insecure, cmd.exe):
+  - `scripts\run_vuln_mcp_insecure.cmd`
+- Quick start (fully-insecure, macOS/Linux):
+  - `bash scripts/run_vuln_mcp_insecure.sh`
+- Quick start (safer, cmd.exe):
+  - `scripts\run_vuln_mcp_safe.cmd`
+- Quick start (safer, macOS/Linux):
+  - `bash scripts/run_vuln_mcp_safe.sh`
+- Run normally (macOS/Linux):
+  - `bash scripts/run_vuln_mcp.sh`
 - Toggle vulnerabilities via env vars (true by default):
   - `VULN_ALLOW_GET_PUT` (allow GET/PUT on /tool/run)
   - `VULN_ALLOW_TRACE` (allow TRACE on /tool/run)
@@ -35,6 +45,10 @@ Vulnerable MCP server (vuln-mcp/)
   - `VULN_REPLAY_CODE` (allow authorization code reuse)
   - `VULN_ACCEPT_BOGUS_TOKEN` (accept any bearer token at /)
   - `VULN_SSRF_BLOCK` (set true to enable basic SSRF blocking; defaults to false for vulnerability)
+  - `VULN_ACCEPT_ALG_NONE` (accept unsigned JWTs alg=none)
+  - `VULN_WEAK_RSA_KEY` (use 1024-bit RSA key in JWKS)
+  - `VULN_NO_HSTS` (omit HSTS header)
+  - `VULN_DANGEROUS_TOOL` (expose a dangerous `exec` tool in /tools)
 
 Scanner usage with harness
 - Dynamic registration + PKCE (Python API):
