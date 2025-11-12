@@ -16,6 +16,29 @@ A lightweight command-line tool to scan and report on MCP endpoints, schemas, an
 - Python 3.10+
 - Run: `python main.py --help`
 
+### Quick start config
+Use a minimal sentinel.yml to control headers and per-host policy. See full sample at docs/samples/sentinel.example.yml.
+
+```yaml
+offline: false
+policy:
+  strict_auth_domains: true
+http:
+  timeout: 10
+  headers:
+    User-Agent: mcp-scanner
+    Accept: application/json
+  headers_merge: merge_prefer_domain
+# Per-host overrides
+domains:
+  api.example.com:
+    allow_auth: true
+    headers:
+      Authorization: "Bearer REPLACE_ME"
+      X-Org: "security-scan"
+    timeouts: { connect: 5, read: 30 }
+```
+
 ## Why Sentinel?
 - CI-friendly: JSON/SARIF output, non-zero exit on high severity
 - Practical probes: auth, guardrails, SSRF, rate limit, method/Content-Type matrix
