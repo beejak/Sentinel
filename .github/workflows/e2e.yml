@@ -43,6 +43,9 @@ jobs:
       - name: Run scanner and collect artifacts (no fail)
         run: |
           python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --out e2e-scan.json --sarif e2e-scan.sarif --html e2e-scan.html --fail-on none
+      - name: Run intrusive + SSRF (no fail; collect artifacts)
+        run: |
+          python main.py scan --target http://127.0.0.1:8090 --profile intrusive --timeout 5 --enable-private-egress-checks --out e2e-intrusive.json --sarif e2e-intrusive.sarif --html e2e-intrusive.html --fail-on none
       - uses: actions/upload-artifact@v4
         with:
           name: e2e-insecure-artifacts
@@ -50,6 +53,9 @@ jobs:
             e2e-scan.json
             e2e-scan.sarif
             e2e-scan.html
+            e2e-intrusive.json
+            e2e-intrusive.sarif
+            e2e-intrusive.html
             vuln-mcp.log
       - name: Enforce expected failure on high
         run: |

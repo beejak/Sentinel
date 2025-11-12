@@ -1,0 +1,31 @@
+# Example Sentinel configuration for mcp-scanner
+# Copy to sentinel.yml and adjust per your environment.
+
+offline: false
+
+policy:
+  enable_private_egress_checks: false   # set true to test SSRF to private ranges (probe 014)
+  strict_auth_domains: true             # strip Authorization unless host is explicitly allowed
+
+http:
+  verify: true                          # true|false|/path/to/ca.pem
+  proxy: null                           # http://127.0.0.1:8080
+  timeout: 10
+  headers:
+    User-Agent: mcp-scanner
+    Accept: application/json
+  headers_merge: merge_prefer_domain    # replace|merge_prefer_domain|merge_prefer_global|append|prepend
+
+domains:
+  api.example.com:
+    allow_auth: true
+    headers:
+      Authorization: "Bearer REPLACE_ME"
+      X-Org: "security-scan"
+    headers_merge: append               # base header values first, then domain values
+    timeouts:
+      connect: 5
+      read: 30
+  .internal.example.com:
+    headers:
+      X-Tag: "internal"
