@@ -1,6 +1,5 @@
 import time
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
 
 import requests
 from . import http
