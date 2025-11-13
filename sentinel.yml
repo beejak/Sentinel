@@ -3,8 +3,8 @@ policy:
   enable_private_egress_checks: false
 http:
   verify: true
-  # cert: 
-  # key: 
+  # cert:
+  # key:
   # proxy: http://127.0.0.1:8080
   timeout: 10
   headers:

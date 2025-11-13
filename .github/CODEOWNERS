@@ -1,0 +1,7 @@
+# Default owners
+* @beejak
+
+# Sensitive/functional areas require review by owner
+/scanner/** @beejak
+/vuln-mcp/** @beejak
+/.github/workflows/** @beejak

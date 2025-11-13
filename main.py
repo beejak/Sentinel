@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from scanner.discovery import discover
 from scanner.auth import run_auth_flow, run_auth_flow_dynamic
@@ -33,8 +33,8 @@ def scan(target: str) -> Dict[str, Any]:
     }
 
 
-
-def main() -> None:
+def _create_arg_parser() -> argparse.ArgumentParser:
+    """Create and configure the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(description="MCP Scanner CLI")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -79,6 +79,7 @@ def main() -> None:
     p_probe = subparsers.add_parser("probe", parents=[common], help="Run runtime probes against target")
     p_probe.add_argument("--baseline-in", help="Path to baseline fingerprints to suppress pre-existing findings")
     p_probe.add_argument("--baseline-out", help="Write current fingerprints to file (establish new baseline)")
+    p_probe.add_argument("--fail-on", choices=["none", "low", "medium", "high"], default="high", help="Exit non-zero if findings at or above this severity are present (default: high)")
 
     # repo-scan subcommand (static analysis placeholder)
     p_repo = subparsers.add_parser("repo-scan", parents=[common], help="Scan a repository path or URL (static analysis)")
@@ -96,11 +97,11 @@ def main() -> None:
     p_probe.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
     p_probe.add_argument("--out", help="Write findings JSON to file")
     p_probe.add_argument("--sarif", help="Write SARIF 2.1.0 to file")
-    p_probe.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
+    p_probe.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings (overrides --fail-on)")
 
     # scan subcommand (aggregated discover + probes)
     p_scan = subparsers.add_parser("scan", parents=[common], help="Run full scan (discover + probes)")
-    p_scan.add_argument("target", help="MCP endpoint or server to scan (e.g., URL or host)")
+    p_scan.add_argument("--target", required=True, help="MCP endpoint or server to scan (e.g., URL or host)")
     p_scan.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_scan.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
     p_scan.add_argument("--out", help="Write combined JSON to file")
@@ -108,7 +109,8 @@ def main() -> None:
     p_scan.add_argument("--md", help="Write Markdown report to file")
     p_scan.add_argument("--html", help="Write HTML report to file")
     p_scan.add_argument("--json", action="store_true", help="Print JSON to stdout (default view)")
-    p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings")
+    p_scan.add_argument("--no-fail", action="store_true", help="Do not exit non-zero on high severity findings (overrides --fail-on)")
+    p_scan.add_argument("--fail-on", choices=["none", "low", "medium", "high"], default="high", help="Exit non-zero if findings at or above this severity are present (default: high)")
     p_scan.add_argument("--baseline-in", help="Path to baseline fingerprints")
     p_scan.add_argument("--baseline-out", help="Write current fingerprints to file")
 
@@ -116,10 +118,12 @@ def main() -> None:
     parser.add_argument("fallback_target", nargs="?", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
 
-    args = parser.parse_args()
+    return parser
 
-    # Load config and apply CLI overrides
-    from scanner.config import load_config, get_config, set_config
+
+def _apply_config_overrides(args: argparse.Namespace) -> Dict[str, Any]:
+    """Load config and apply CLI overrides."""
+    from scanner.config import load_config, set_config
     cfg = load_config(getattr(args, "config", None))
     # CLI overrides
     http_cfg = dict(cfg.get("http", {}))
@@ -154,8 +158,42 @@ def main() -> None:
     cfg["http"] = http_cfg
     cfg["policy"] = policy
     set_config(cfg)
+    return cfg
+
+
+def _configure_logging(args: argparse.Namespace) -> None:
+    """Configure logging based on command-line arguments."""
+    log_level = getattr(args, "log_level", None) or "INFO"
+    level = getattr(logging, str(log_level).upper(), logging.INFO)
+    if getattr(args, "log_format", "text") == "json":
+        handler = logging.StreamHandler()
+        handler.setFormatter(JSONLogFormatter())
+        root = logging.getLogger()
+        root.handlers = []
+        root.addHandler(handler)
+        root.setLevel(level)
+    else:
+        logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
+    logger.debug("parsed args: %s", vars(args))
+
+
+def main() -> None:
+    parser = _create_arg_parser()
+    args = parser.parse_args()
+    
+    _apply_config_overrides(args)
+    _configure_logging(args)
 
     # Baseline helpers
+    def _sev_order(s: str) -> int:
+        return {"low": 1, "medium": 2, "high": 3}.get(str(s).lower(), 0)
+
+    def _fail_threshold_reached(findings: list[dict], threshold: str) -> bool:
+        if threshold == "none":
+            return False
+        t = _sev_order(threshold)
+        return any(_sev_order(f.get("severity", "")) >= t for f in findings)
+
     def _fp(f: Dict[str, Any]) -> str:
         import hashlib
         path = str(((f.get("evidence") or {}).get("path")) or "")
@@ -185,20 +223,6 @@ def main() -> None:
                 fh.write(json.dumps(payload, indent=2))
         except Exception:
             pass
-
-    # Configure logging
-    log_level = getattr(args, "log_level", None) or "INFO"
-    level = getattr(logging, str(log_level).upper(), logging.INFO)
-    if getattr(args, "log_format", "text") == "json":
-        handler = logging.StreamHandler()
-        handler.setFormatter(JSONLogFormatter())
-        root = logging.getLogger()
-        root.handlers = []
-        root.addHandler(handler)
-        root.setLevel(level)
-    else:
-        logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
-    logger.debug("parsed args: %s", vars(args))
 
     if args.command == "discover":
         if getattr(args, "offline", False):
@@ -291,9 +315,9 @@ def main() -> None:
         # Print summary if no out
         if not getattr(args, "out", None):
             print(json.dumps(result, indent=2))
-        # Exit non-zero on high severity unless --no-fail
-        has_high = any((f.get("severity") == "high") for f in result.get("findings", []))
-        if has_high and not getattr(args, "no_fail", False):
+        # Exit condition
+        threshold = getattr(args, "fail_on", "high")
+        if not getattr(args, "no_fail", False) and _fail_threshold_reached(result.get("findings", []), threshold):
             raise SystemExit(1)
         return
 
@@ -343,9 +367,9 @@ def main() -> None:
     # Print JSON unless suppressed
     if getattr(args, "json", True):
         print(json.dumps(result, indent=2))
-    # Exit on high findings unless --no-fail
-    has_high = any((f.get("severity") == "high") for f in probes.get("findings", []))
-    if has_high and not getattr(args, "no_fail", False):
+    # Exit condition
+    threshold = getattr(args, "fail_on", "high")
+    if not getattr(args, "no_fail", False) and _fail_threshold_reached(probes.get("findings", []), threshold):
         raise SystemExit(1)
 
 
@@ -425,8 +449,8 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     oa = (result.get("discovery", {}).get("oauth_summary") or {})
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
-    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
-    # Counts
+    # Remediation list for present rules
+    try:
         from scanner.probes import RULE_META as _RULE_META
     except Exception:
         _RULE_META = {}
@@ -439,7 +463,6 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
             rem = ((_RULE_META.get(rid) or {}).get('remediation'))
             if rem:
                 present_rules.append((rid, rem))
-    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
     # Counts
     hi = sum(1 for f in findings if (f.get('severity') == 'high'))
     me = sum(1 for f in findings if (f.get('severity') == 'medium'))
@@ -468,6 +491,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
         f"<tr><td><a href='https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a><details><summary>details</summary><pre>{_evidence_html(f)}</pre></details></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe_link(f)}</td></tr>"
         for f in findings
     )
+    rows_html = rows if rows else '<tr><td colspan="4">No findings</td></tr>'
     return f"""
 <!doctype html>
 <html><head><meta charset='utf-8'>
@@ -497,7 +521,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <h2>Findings</h2>
 <table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>CWE</th></tr></thead>
 <tbody>
-{rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
+{rows_html}
 </tbody></table>
 <h2>Remediation Guidance</h2>
 <ul>

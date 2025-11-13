@@ -16,6 +16,29 @@ A lightweight command-line tool to scan and report on MCP endpoints, schemas, an
 - Python 3.10+
 - Run: `python main.py --help`
 
+### Quick start config
+Use a minimal sentinel.yml to control headers and per-host policy. See full sample at docs/samples/sentinel.example.yml.
+
+```yaml
+offline: false
+policy:
+  strict_auth_domains: true
+http:
+  timeout: 10
+  headers:
+    User-Agent: mcp-scanner
+    Accept: application/json
+  headers_merge: merge_prefer_domain
+# Per-host overrides
+domains:
+  api.example.com:
+    allow_auth: true
+    headers:
+      Authorization: "Bearer REPLACE_ME"
+      X-Org: "security-scan"
+    timeouts: { connect: 5, read: 30 }
+```
+
 ## Why Sentinel?
 - CI-friendly: JSON/SARIF output, non-zero exit on high severity
 - Practical probes: auth, guardrails, SSRF, rate limit, method/Content-Type matrix
@@ -29,7 +52,8 @@ CLI -> Discovery (well-known + WWW-Authenticate) -> Probes (HTTP matrix, OAuth c
 - Setup venv + deps: `scripts\setup.cmd`
 - Run CLI: `scripts\run_scanner.cmd --help`
 - Start local harness (secure): `scripts\run_harness.cmd`
-- Start vulnerable MCP server: `scripts\run_vuln_mcp.cmd`
+- Start vulnerable MCP server (fully-insecure): `scripts\run_vuln_mcp_insecure.cmd`
+- Start vulnerable MCP server (safer): `scripts\run_vuln_mcp_safe.cmd`
 
 ### Install
 - Pip (dev install): `pip install -r requirements.txt`
@@ -50,8 +74,8 @@ CLI -> Discovery (well-known + WWW-Authenticate) -> Probes (HTTP matrix, OAuth c
 python main.py discover <target> [-o out.json]
 python main.py auth <target> --client-id <id> [--scopes "openid profile"] [--redirect-port 8765] [--resource <origin>] [--open-browser] [-o out.json]
 python main.py auth-dynamic <issuer> [--scopes "openid profile"] [--redirect-port 8765] [--resource <origin>] [--open-browser] [-o out.json]
-python main.py probe <target> [--profile baseline|intrusive] [--timeout 10] [--out findings.json] [--sarif report.sarif] [--no-fail]
-python main.py scan <target> [--json]
+python main.py probe <target> [--profile baseline|intrusive] [--timeout 10] [--out findings.json] [--sarif report.sarif] [--fail-on none|low|medium|high] [--no-fail]
+python main.py scan <target> [--profile baseline|intrusive] [--timeout 10] [--html out.html] [--sarif out.sarif] [--fail-on none|low|medium|high] [--no-fail]
 ```
 
 Examples:
@@ -65,7 +89,7 @@ Examples:
 
 Docs:
 - Usage guide: `docs/USAGE.md`
-- Config guide: `docs/CONFIG.md`
+- Config guide: `docs/CONFIG.md` (see sample: `docs/samples/sentinel.example.yml`)
 - Probe catalog: `docs/PROBES.md`
 - Repo scanning: `docs/REPO_SCANNING.md`
 - Architecture: `docs/ARCHITECTURE.md`

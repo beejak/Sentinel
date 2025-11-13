@@ -1,0 +1,125 @@
+name: E2E - vuln-mcp
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vuln-mcp-insecure:
+    name: Insecure server – scanner detects vulns
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests pyyaml; fi
+      - name: Launch vuln-mcp (insecure)
+        env:
+          VULN_ACCEPT_ALG_NONE: 'true'
+          VULN_WEAK_RSA_KEY: 'true'
+          VULN_NO_HSTS: 'true'
+          VULN_DANGEROUS_TOOL: 'true'
+          VULN_ALLOW_GET_PUT: 'true'
+          VULN_ALLOW_TRACE: 'true'
+          VULN_ACCEPT_MISSING_CT: 'true'
+          VULN_ALLOW_TRAVERSAL: 'true'
+          VULN_PERMISSIVE_TOOL_RUN: 'true'
+          VULN_REPLAY_CODE: 'true'
+          VULN_ACCEPT_BOGUS_TOKEN: 'true'
+          VULN_SSRF_BLOCK: 'false'
+        run: |
+          set -e
+          nohup bash -c 'cd vuln-mcp && go run . > ../vuln-mcp.log 2>&1' &
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null; then
+              echo "vuln-mcp is up"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null || { echo "vuln-mcp failed to start"; echo '--- vuln-mcp.log ---'; test -f vuln-mcp.log && tail -n +1 vuln-mcp.log || true; exit 1; }
+      - name: Run scanner and collect artifacts (no fail)
+        run: |
+          python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --out e2e-scan.json --sarif e2e-scan.sarif --html e2e-scan.html --fail-on none
+      - name: Run intrusive + SSRF (no fail; collect artifacts)
+        run: |
+          python main.py scan --target http://127.0.0.1:8090 --profile intrusive --timeout 5 --enable-private-egress-checks --out e2e-intrusive.json --sarif e2e-intrusive.sarif --html e2e-intrusive.html --fail-on none
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-insecure-artifacts
+          path: |
+            e2e-scan.json
+            e2e-scan.sarif
+            e2e-scan.html
+            e2e-intrusive.json
+            e2e-intrusive.sarif
+            e2e-intrusive.html
+            vuln-mcp.log
+      - name: Enforce expected failure on high
+        run: |
+          set +e
+          python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --fail-on high
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "Expected non-zero exit due to high findings, but got 0" >&2
+            echo '--- vuln-mcp.log ---'
+            test -f vuln-mcp.log && tail -n +200 vuln-mcp.log || true
+            exit 1
+          fi
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- vuln-mcp.log ---'
+          test -f vuln-mcp.log && tail -n +200 vuln-mcp.log || true
+          echo '--- scanner output (if any) ---'
+          ls -la || true
+  vuln-mcp-safe:
+    name: Safe server – scanner passes threshold
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests pyyaml; fi
+      - name: Launch vuln-mcp (safer)
+        env:
+          VULN_ACCEPT_ALG_NONE: 'false'
+          VULN_WEAK_RSA_KEY: 'false'
+          VULN_NO_HSTS: 'false'
+          VULN_DANGEROUS_TOOL: 'false'
+          VULN_ALLOW_GET_PUT: 'false'
+          VULN_ALLOW_TRACE: 'false'
+          VULN_ACCEPT_MISSING_CT: 'false'
+          VULN_ALLOW_TRAVERSAL: 'false'
+          VULN_PERMISSIVE_TOOL_RUN: 'false'
+          VULN_REPLAY_CODE: 'false'
+          VULN_ACCEPT_BOGUS_TOKEN: 'false'
+          VULN_SSRF_BLOCK: 'true'
+        run: |
+          set -e
+          nohup bash -c 'cd vuln-mcp && go run . > ../vuln-mcp-safe.log 2>&1' &
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null; then
+              echo "vuln-mcp is up"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null || { echo "vuln-mcp failed to start"; echo '--- vuln-mcp-safe.log ---'; test -f vuln-mcp-safe.log && tail -n +1 vuln-mcp-safe.log || true; exit 1; }
+      - name: Run scanner (should pass threshold)
+        run: |
+          python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --fail-on high
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- vuln-mcp-safe.log ---'
+          test -f vuln-mcp-safe.log && tail -n +200 vuln-mcp-safe.log || true

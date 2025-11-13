@@ -16,6 +16,11 @@
   Fix: Enable HSTS and disable TLS 1.0/1.1.
 This document lists available probes, their rule IDs, purpose, and typical outcomes.
 
+## Profiles and intrusive mode
+- Baseline: safe-by-default probes that avoid heavy payloads.
+- Intrusive: includes stress-oriented checks like OversizePayload (PROBE-003) and LargeHeader (PROBE-013). These can increase server load and may trigger rate limits or WAFs; use in non-production or in controlled windows.
+- SSRF checks: private egress targets are opt-in. Enable with CLI flag --enable-private-egress-checks or set policy.enable_private_egress_checks: true in sentinel.yml.
+
 <a id="probe-001"></a>
 ### PROBE-001 — BogusTokenProbe (high)
   Ensures resource rejects requests with bogus bearer tokens (expects 401/403).

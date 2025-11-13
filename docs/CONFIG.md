@@ -68,6 +68,7 @@ Hints
 - Prefer CLI: --header "Authorization: Bearer <TOKEN>"
 - Or env: SENTINEL_HTTP_HEADER_AUTHORIZATION="Bearer <TOKEN>"
 - Keep sensitive headers commented in sentinel.yml to avoid accidental commits/leaks.
+- See example config at docs/samples/sentinel.example.yml
 
 Environment variables
 - SENTINEL_OFFLINE=true|false

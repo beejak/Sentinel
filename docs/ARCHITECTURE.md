@@ -11,7 +11,7 @@ Language and packaging
 
 High-level components
 - cli: argument parsing, config merge, progress UI, exit codes
-- discovery: 
+- discovery:
   - HTTP probe; parse WWW-Authenticate on 401; RFC9728/8414 metadata discovery; enumerate capabilities (tools/resources/prompts)
 - auth_tester:
   - OAuth 2.1 Authorization Code + PKCE; resource (RFC8707) and audience checks; redirect/TLS hygiene; token passthrough negative tests; confused-deputy consent validation
