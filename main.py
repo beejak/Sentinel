@@ -479,6 +479,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
         f"<tr><td><a href='https://github.com/beejak/Sentinel/blob/main/docs/PROBES.md' target='_blank'>{html.escape(f.get('ruleId',''))}</a><details><summary>details</summary><pre>{_evidence_html(f)}</pre></details></td><td class='{_sev_cls(str(f.get('severity','')))}'>{html.escape(f.get('severity',''))}</td><td>{html.escape(f.get('title',''))}</td><td>{_cwe_link(f)}</td></tr>"
         for f in findings
     )
+    rows_html = rows if rows else '<tr><td colspan="4">No findings</td></tr>'
     return f"""
 <!doctype html>
 <html><head><meta charset='utf-8'>
@@ -508,7 +509,7 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
 <h2>Findings</h2>
 <table><thead><tr><th>Rule</th><th>Severity</th><th>Title</th><th>CWE</th></tr></thead>
 <tbody>
-{rows if rows else '<tr><td colspan=\"4\">No findings</td></tr>'}
+{rows_html}
 </tbody></table>
 <h2>Remediation Guidance</h2>
 <ul>
