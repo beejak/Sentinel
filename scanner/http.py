@@ -33,7 +33,8 @@ def _merge_with_strategy(base: Dict[str, str], dom: Dict[str, str], strategy: st
             else:
                 out[k] = v
         return out
-    # default merge_prefer_domainn    out = dict(base)
+    # default merge_prefer_domain
+    out = dict(base)
     out.update(dom)
     return out
 
