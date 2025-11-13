@@ -17,13 +17,16 @@ HTTP_OK = 200
 HTTP_CREATED = 201
 HTTP_FOUND = 302
 HTTP_SEE_OTHER = 303
+HTTP_REDIRECT_MAX = 300  # Upper bound for 2xx range
 HTTP_BAD_REQUEST = 400
 HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
-HTTP_NOT_FOUND = 404
 HTTP_METHOD_NOT_ALLOWED = 405
 HTTP_TOO_MANY_REQUESTS = 429
 HTTP_INTERNAL_ERROR = 500
+
+# Security constants
+MIN_RSA_KEY_BITS = 2048  # Minimum RSA key size
 
 
 Severity = str  # "low" | "medium" | "high"
@@ -233,10 +236,9 @@ def _oauth_dynamic_register(issuer: str, redirect_uri: str, timeout: int) -> Opt
     }
     r = http.post(reg, json=body, headers={"Accept": "application/json"}, timeout=timeout)
     j = None
-    try:
+    from contextlib import suppress
+    with suppress(Exception):
         j = r.json()
-    except Exception:
-        pass
     return (j or {}).get("client_id") if r.status_code in (HTTP_OK, HTTP_CREATED) else None
 
 
@@ -300,10 +302,9 @@ class ToolGuardrailsProbe(Probe):
             return [_result(self.id, "high", "State mismatch on authorization redirect", {})]
         rtok = _oauth_exchange_token(origin, code, client_id, verifier, redirect_uri, origin, timeout)
         tok_json = None
-        try:
+        from contextlib import suppress
+        with suppress(Exception):
             tok_json = rtok.json()
-        except Exception:
-            pass
         access = (tok_json or {}).get("access_token") if rtok.status_code == HTTP_OK else None
         if not access:
             return [_result(self.id, "low", "Unable to acquire access token", {"status": rtok.status_code})]
@@ -330,7 +331,7 @@ class ToolGuardrailsProbe(Probe):
                     headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"},
                     timeout=timeout,
                 )
-                if HTTP_OK <= r.status_code < 300:
+                if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                     findings.append(_result(self.id, "high", "Tool invocation accepted dangerous parameters", {"payload": payload, "status": r.status_code}))
                 elif r.status_code in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
                     # Expected deny; assert structured error shape
@@ -434,7 +435,7 @@ class MethodMatrixProbe(Probe):
         # Endpoints to test: /tool/run should reject GET; /tools should accept GET; root may accept GET
         try:
             r_get_tool = requests.get(origin + "/tool/run", timeout=timeout)
-            if HTTP_OK <= r_get_tool.status_code < 300:
+            if HTTP_OK <= r_get_tool.status_code < HTTP_REDIRECT_MAX:
                 findings.append(_result(self.id, "high", "GET allowed on /tool/run (should be POST only)", {"status": r_get_tool.status_code}))
             elif r_get_tool.status_code not in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED):
                 findings.append(_result(self.id, "medium", "Unexpected status for GET /tool/run", {"status": r_get_tool.status_code}))
@@ -442,7 +443,7 @@ class MethodMatrixProbe(Probe):
             findings.append(_result(self.id, "low", "Error on GET /tool/run", {"error": str(e)}))
         try:
             r_put_tool = http.request("PUT", origin + "/tool/run", timeout=timeout)
-            if HTTP_OK <= r_put_tool.status_code < 300:
+            if HTTP_OK <= r_put_tool.status_code < HTTP_REDIRECT_MAX:
                 findings.append(_result(self.id, "high", "PUT allowed on /tool/run (should be POST only)", {"status": r_put_tool.status_code}))
             elif r_put_tool.status_code not in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED):
                 findings.append(_result(self.id, "medium", "Unexpected status for PUT /tool/run", {"status": r_put_tool.status_code}))
@@ -478,7 +479,7 @@ class ContentTypeMatrixProbe(Probe):
                     data=(body if isinstance(body, str) else None),
                     timeout=timeout,
                 )
-                if HTTP_OK <= r.status_code < 300:
+                if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                     findings.append(_result(self.id, "high", "Accepted invalid/mismatched Content-Type or body", {"headers": headers, "body": str(body)[:120]}))
                 elif r.status_code >= HTTP_INTERNAL_ERROR:
                     findings.append(_result(self.id, "medium", "5xx on Content-Type/body mismatch", {"headers": headers, "status": r.status_code}))
@@ -503,7 +504,7 @@ class TraceMethodProbe(Probe):
         origin = _origin(target)
         try:
             r = http.request("TRACE", origin + "/tool/run", timeout=timeout)
-            if HTTP_OK <= r.status_code < 300:
+            if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                 return [_result(self.id, "high", "TRACE allowed on /tool/run", {"status": r.status_code})]
             if r.status_code not in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED):
                 return [_result(self.id, "medium", "Unexpected status for TRACE /tool/run", {"status": r.status_code})]
@@ -521,7 +522,7 @@ class MissingContentTypeProbe(Probe):
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
             r = http.post(origin + "/tool/run", data=__import__("json").dumps(payload), timeout=timeout)
-            if HTTP_OK <= r.status_code < 300:
+            if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                 return [_result(self.id, "high", "Accepted POST without Content-Type", {"status": r.status_code})]
             elif r.status_code >= HTTP_INTERNAL_ERROR:
                 return [_result(self.id, "medium", "5xx on missing Content-Type", {"status": r.status_code})]
@@ -593,7 +594,7 @@ class SSRFProbe(Probe):
                     headers={"Authorization": f"Bearer {access}", "Content-Type": "application/json"},
                     timeout=timeout,
                 )
-                if HTTP_OK <= r.status_code < 300:
+                if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                     findings.append(_result(self.id, "high", "SSRF: server fetched a private/loopback URL", {"target": url, "status": r.status_code}))
                 elif r.status_code in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
                     # Expected block; prefer structured error
@@ -658,7 +659,7 @@ class JWKSKeyStrengthProbe(Probe):
                     import base64
                     nb = base64.urlsafe_b64decode(n_b64 + "==")
                     bits = len(nb) * 8
-                    if bits < 2048:
+                    if bits < MIN_RSA_KEY_BITS:
                         findings.append(_result(self.id, "high", "RSA key size too small", {"kid": k.get("kid"), "bits": bits}))
                     if alg.startswith("ES"):
                         findings.append(_result(self.id, "medium", "alg/kty mismatch: RSA key with ES* algorithm", {"kid": k.get("kid"), "alg": alg, "kty": kty}))
@@ -705,8 +706,8 @@ class HSTSAndTLSProbe(Probe):
             port = u.port or 443
             if u.scheme == "https" and host:
                 ctx = ssl.create_default_context()
-                with socket.create_connection((host, port), timeout=timeout) as sock:
-                    with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                with socket.create_connection((host, port), timeout=timeout) as sock, \
+                     ctx.wrap_socket(sock, server_hostname=host) as ssock:
                         ver = getattr(ssock, "version", lambda: "unknown")()
                         if ver in ("TLSv1", "TLSv1.1"):
                             findings.append(_result(self.id, "medium", "TLS version is outdated", {"version": ver}))
@@ -791,7 +792,7 @@ class InvalidAuthProbe(Probe):
         payload = {"tool": "read_file", "args": {"path": "/tmp/test.txt"}}
         try:
             r = http.post(origin + "/tool/run", json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
-            if HTTP_OK <= r.status_code < 300:
+            if HTTP_OK <= r.status_code < HTTP_REDIRECT_MAX:
                 return [_result(self.id, "high", "/tool/run succeeded without Authorization header", {"status": r.status_code})]
             if r.status_code not in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_METHOD_NOT_ALLOWED, HTTP_TOO_MANY_REQUESTS):
                 return [_result(self.id, "medium", "Unexpected status for unauthenticated /tool/run", {"status": r.status_code})]

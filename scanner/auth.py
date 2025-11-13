@@ -69,10 +69,13 @@ def _open_browser(url: str) -> None:
         pass
 
 
+# Minimum JWT parts required (header + payload)
+MIN_JWT_PARTS = 2
+
 def _decode_jwt_aud(token: str) -> Optional[Any]:
     try:
         parts = token.split(".")
-        if len(parts) < 2:
+        if len(parts) < MIN_JWT_PARTS:
             return None
         payload = _b64url_decode_nopad(parts[1])
         import json
@@ -167,7 +170,8 @@ def run_auth_flow(*, target: str, client_id: str, scopes: str, redirect_port: in
             except Exception:
                 token_json = None
             token_resp["json"] = token_json
-            if r.status_code == 200 and token_json and token_json.get("access_token"):
+            HTTP_OK = 200
+            if r.status_code == HTTP_OK and token_json and token_json.get("access_token"):
                 aud = _decode_jwt_aud(token_json["access_token"]) or []
                 if isinstance(aud, str):
                     aud = [aud]

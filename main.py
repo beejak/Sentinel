@@ -449,7 +449,6 @@ def _render_html_scan(result: Dict[str, Any]) -> str:
     oa = (result.get("discovery", {}).get("oauth_summary") or {})
     sc = result.get("scorecard", {})
     findings = result.get("probes", {}).get("findings", [])
-    sev_color = {"high": "#e74c3c", "medium": "#f39c12", "low": "#3498db"}
     # Remediation list for present rules
     try:
         from scanner.probes import RULE_META as _RULE_META

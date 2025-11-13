@@ -22,7 +22,7 @@ def _merge_with_strategy(base: Dict[str, str], dom: Dict[str, str], strategy: st
         out = dict(dom)
         out.update(base)
         return out
-    if strategy == "append" or strategy == "prepend":
+    if strategy in ("append", "prepend"):
         out = dict(base)
         for k, v in dom.items():
             if k in out:
