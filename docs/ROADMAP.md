@@ -77,7 +77,7 @@ Milestone 10 — Hardening & Release (Week 15)
   - Versioned rule IDs; semantic versioning; CONTRIBUTING; release notes; telemetry toggle
 - Acceptance
   - Tagged release; changelog; docs up to date
-Add a research assistance to gather info everyday from different reources from across the internet to seek what new 
-and what security researches are talking about. new MCP vulnerabilities, zero day, current attack vectores and new 
-and upcoming issues that were reported through the week. Update this somewhere and set a reminder to look into it 
-and figure if this is something to be worried about or could this be incorporated into our product. 
+Add a research assistance to gather info everyday from different reources from across the internet to seek what new
+and what security researches are talking about. new MCP vulnerabilities, zero day, current attack vectores and new
+and upcoming issues that were reported through the week. Update this somewhere and set a reminder to look into it
+and figure if this is something to be worried about or could this be incorporated into our product.
