@@ -2,6 +2,9 @@ import pytest
 from scanner.config import set_config
 from scanner.http import _apply_http_options
 
+# Default HTTP timeout in seconds
+DEFAULT_HTTP_TIMEOUT = 7
+
 
 def test_headers_merge_replace_and_strict_auth():
     set_config({
@@ -29,7 +32,7 @@ def test_headers_merge_replace_and_strict_auth():
 def test_headers_merge_append_and_allow_auth():
     set_config({
         "policy": {"strict_auth_domains": True},
-        "http": {"headers": {"Authorization": "Bearer GLOBAL", "List": "a"}, "headers_merge": "append", "timeout": 7},
+        "http": {"headers": {"Authorization": "Bearer GLOBAL", "List": "a"}, "headers_merge": "append", "timeout": DEFAULT_HTTP_TIMEOUT},
         "domains": {
             "svc.internal": {
                 "headers": {"Authorization": "Bearer DOM", "List": "b"},
@@ -43,4 +46,4 @@ def test_headers_merge_append_and_allow_auth():
     # append strategy -> base then domain
     assert kwargs["headers"].get("List") == "a, b"
     # default timeout
-    assert kwargs["timeout"] == 7
+    assert kwargs["timeout"] == DEFAULT_HTTP_TIMEOUT

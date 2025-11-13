@@ -24,6 +24,8 @@ mcp-scanner = "main:main"
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E","F","I","B","UP","SIM","PL"]
 ignore = [
   "E501",
@@ -32,9 +34,10 @@ ignore = [
   "PLR0915",  # Too many statements
   "PLR0911",  # Too many return statements
   "PLW0603",  # Global statement usage (needed for config)
+  "PLR2004",  # Magic value used in comparison
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["scanner"]
 
 [tool.black]
