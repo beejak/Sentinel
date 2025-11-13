@@ -37,9 +37,12 @@ jobs:
           VULN_ACCEPT_BOGUS_TOKEN: 'true'
           VULN_SSRF_BLOCK: 'false'
         run: |
+          set -e
           nohup bash -c 'cd vuln-mcp && go run . > ../vuln-mcp.log 2>&1' &
-          sleep 1
-          curl -fsSL --retry 30 --retry-delay 1 http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null; then
+              echo "vuln-mcp is up"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null || { echo "vuln-mcp failed to start"; echo '--- vuln-mcp.log ---'; test -f vuln-mcp.log && tail -n +1 vuln-mcp.log || true; exit 1; }
       - name: Run scanner and collect artifacts (no fail)
         run: |
           python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --out e2e-scan.json --sarif e2e-scan.sarif --html e2e-scan.html --fail-on none
@@ -64,8 +67,17 @@ jobs:
           rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "Expected non-zero exit due to high findings, but got 0" >&2
+            echo '--- vuln-mcp.log ---'
+            test -f vuln-mcp.log && tail -n +200 vuln-mcp.log || true
             exit 1
           fi
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- vuln-mcp.log ---'
+          test -f vuln-mcp.log && tail -n +200 vuln-mcp.log || true
+          echo '--- scanner output (if any) ---'
+          ls -la || true
   vuln-mcp-safe:
     name: Safe server – scanner passes threshold
     runs-on: ubuntu-latest
@@ -97,9 +109,17 @@ jobs:
           VULN_ACCEPT_BOGUS_TOKEN: 'false'
           VULN_SSRF_BLOCK: 'true'
         run: |
+          set -e
           nohup bash -c 'cd vuln-mcp && go run . > ../vuln-mcp-safe.log 2>&1' &
-          sleep 1
-          curl -fsSL --retry 30 --retry-delay 1 http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null; then
+              echo "vuln-mcp is up"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8090/.well-known/openid-configuration >/dev/null || { echo "vuln-mcp failed to start"; echo '--- vuln-mcp-safe.log ---'; test -f vuln-mcp-safe.log && tail -n +1 vuln-mcp-safe.log || true; exit 1; }
       - name: Run scanner (should pass threshold)
         run: |
           python main.py scan --target http://127.0.0.1:8090 --profile baseline --timeout 5 --fail-on high
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- vuln-mcp-safe.log ---'
+          test -f vuln-mcp-safe.log && tail -n +200 vuln-mcp-safe.log || true
