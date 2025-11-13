@@ -101,7 +101,7 @@ def _create_arg_parser() -> argparse.ArgumentParser:
 
     # scan subcommand (aggregated discover + probes)
     p_scan = subparsers.add_parser("scan", parents=[common], help="Run full scan (discover + probes)")
-    p_scan.add_argument("target", help="MCP endpoint or server to scan (e.g., URL or host)")
+    p_scan.add_argument("--target", required=True, help="MCP endpoint or server to scan (e.g., URL or host)")
     p_scan.add_argument("--profile", choices=["baseline", "intrusive"], default="baseline", help="Probe profile (default: baseline)")
     p_scan.add_argument("--timeout", type=int, default=10, help="Per-request timeout seconds (default: 10)")
     p_scan.add_argument("--out", help="Write combined JSON to file")
