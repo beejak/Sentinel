@@ -174,6 +174,7 @@ def repo_scan_to_sarif(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def repo_scan_to_html(result: Dict[str, Any]) -> str:
+    from datetime import datetime, timezone
     import html
     fnds = result.get("findings", [])
     hi = sum(1 for f in fnds if f.get("severity") == "high")
